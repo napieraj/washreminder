@@ -1,7 +1,7 @@
 {
   "domain": "washreminder",
   "name": "Wash Reminder",
-  "version": "1.2.0b1",
+  "version": "1.2.0b0",
   "documentation": "https://github.com/napieraj/washreminder",
   "issue_tracker": "https://github.com/napieraj/washreminder/issues",
   "codeowners": ["@napieraj"],
