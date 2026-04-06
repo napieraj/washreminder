@@ -42,6 +42,19 @@ CONF_MAX_REPEATS = "max_repeats"
 CONF_ARRIVAL_DELAY_SECONDS = "arrival_delay_seconds"
 
 # ---------------------------------------------------------------------------
+# Trigger mode constants
+# ---------------------------------------------------------------------------
+CONF_TRIGGER_MODE = "trigger_mode"
+CONF_WASHDATA_ENTRY_ID = "washdata_entry_id"
+
+TRIGGER_MODE_BINARY_SENSOR = "binary_sensor"
+TRIGGER_MODE_STATE_SENSOR = "state_sensor"
+TRIGGER_MODE_WASHDATA_EVENT = "washdata_event"
+
+EVENT_WASHDATA_CYCLE_ENDED = "ha_washdata_cycle_ended"
+WASHDATA_DOMAIN = "ha_washdata"
+
+# ---------------------------------------------------------------------------
 # Trigger state defaults
 # ---------------------------------------------------------------------------
 DEFAULT_BINARY_SENSOR_TRIGGER_STATE = ""      # Sentinel: use on→off logic
