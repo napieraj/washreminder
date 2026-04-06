@@ -20,6 +20,7 @@ from .const import (
     ACTION_DONE,
     ACTION_SNOOZE,
     CONF_ARRIVAL_DELAY_SECONDS,
+    CONF_CRITICAL_NOTIFICATION,
     CONF_DOOR_SENSOR,
     CONF_DOOR_SENSOR_INVERTED,
     CONF_MAX_REPEATS,
@@ -32,6 +33,7 @@ from .const import (
     CONF_TRIGGER_STATE,
     CONF_WASHDATA_ENTRY_ID,
     DEFAULT_ARRIVAL_DELAY_SECONDS,
+    DEFAULT_CRITICAL_NOTIFICATION,
     DEFAULT_MAX_REPEATS,
     DEFAULT_REPEAT_INTERVAL_MINUTES,
     DEFAULT_SNOOZE_MINUTES,
@@ -145,6 +147,9 @@ class WashReminderCoordinator:
         self._max_repeats: int = int(config.get(CONF_MAX_REPEATS, DEFAULT_MAX_REPEATS))
         self._arrival_delay_seconds: int = int(
             config.get(CONF_ARRIVAL_DELAY_SECONDS, DEFAULT_ARRIVAL_DELAY_SECONDS)
+        )
+        self._critical_notification: bool = bool(
+            config.get(CONF_CRITICAL_NOTIFICATION, DEFAULT_CRITICAL_NOTIFICATION)
         )
 
         # serialize_in_event_loop=True: explicit, matches the 2025.11+ default.
@@ -607,18 +612,21 @@ class WashReminderCoordinator:
                     else self._t("reminder_escalation", count=str(i + 1))
                 )
 
+                extra: dict[str, Any] = {
+                    "tag": NOTIFICATION_TAG,
+                    "actions": [
+                        {"action": ACTION_SNOOZE, "title": self._t("action_snooze")},
+                        {"action": ACTION_DONE, "title": self._t("action_done")},
+                    ],
+                }
+                if self._critical_notification:
+                    extra["push"] = {"interruption-level": "time-sensitive"}
+
                 try:
                     await self._notify(
                         title=self._t("title"),
                         message=message,
-                        extra={
-                            "tag": NOTIFICATION_TAG,
-                            "push": {"interruption-level": "time-sensitive"},
-                            "actions": [
-                                {"action": ACTION_SNOOZE, "title": self._t("action_snooze")},
-                                {"action": ACTION_DONE, "title": self._t("action_done")},
-                            ],
-                        },
+                        extra=extra,
                     )
                 except HomeAssistantError:
                     _LOGGER.error(

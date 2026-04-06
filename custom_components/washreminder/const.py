@@ -9,6 +9,9 @@ DEFAULT_SNOOZE_MINUTES = 15
 DEFAULT_REPEAT_INTERVAL_MINUTES = 30
 DEFAULT_MAX_REPEATS = 10
 DEFAULT_ARRIVAL_DELAY_SECONDS = 30
+DEFAULT_CRITICAL_NOTIFICATION = True
+
+CONF_CRITICAL_NOTIFICATION = "critical_notification"
 
 # ---------------------------------------------------------------------------
 # Notification constants

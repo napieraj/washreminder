@@ -10,6 +10,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ARRIVAL_DELAY_SECONDS,
+    CONF_CRITICAL_NOTIFICATION,
     CONF_DOOR_SENSOR,
     CONF_DOOR_SENSOR_INVERTED,
     CONF_MAX_REPEATS,
@@ -23,6 +24,7 @@ from .const import (
     CONF_WASHDATA_ENTRY_ID,
     DEFAULT_ARRIVAL_DELAY_SECONDS,
     DEFAULT_BINARY_SENSOR_TRIGGER_STATE,
+    DEFAULT_CRITICAL_NOTIFICATION,
     DEFAULT_MAX_REPEATS,
     DEFAULT_REPEAT_INTERVAL_MINUTES,
     DEFAULT_SNOOZE_MINUTES,
@@ -231,6 +233,14 @@ def _timing_schema(defaults: dict) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0, max=120, step=5, mode="box")
             ),
+            vol.Optional(
+                CONF_CRITICAL_NOTIFICATION,
+                default=bool(
+                    defaults.get(
+                        CONF_CRITICAL_NOTIFICATION, DEFAULT_CRITICAL_NOTIFICATION
+                    )
+                ),
+            ): selector.BooleanSelector(),
         }
     )
 

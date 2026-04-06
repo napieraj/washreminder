@@ -72,13 +72,15 @@
           "snooze_minutes": "Snooze duration (minutes)",
           "repeat_interval_minutes": "Repeat interval (minutes)",
           "max_repeats": "Maximum reminders",
-          "arrival_delay_seconds": "Arrival delay (seconds)"
+          "arrival_delay_seconds": "Arrival delay (seconds)",
+          "critical_notification": "Override Focus mode (iOS)"
         },
         "data_description": {
           "snooze_minutes": "How long to wait after tapping Snooze before sending another reminder.",
           "repeat_interval_minutes": "How long to wait between automatic reminders when a notification is ignored.",
           "max_repeats": "Stop reminding after this many attempts. At the default 30-minute interval, 10 reminders span about 5 hours.",
-          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Gives your phone time to reconnect to WiFi. Set to 0 to notify immediately."
+          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Gives your phone time to reconnect to WiFi. Set to 0 to notify immediately.",
+          "critical_notification": "Send notifications as time-sensitive so they break through Focus mode and Do Not Disturb on iOS."
         }
       }
     },
@@ -103,13 +105,15 @@
           "snooze_minutes": "Snooze duration (minutes)",
           "repeat_interval_minutes": "Repeat interval (minutes)",
           "max_repeats": "Maximum reminders",
-          "arrival_delay_seconds": "Arrival delay (seconds)"
+          "arrival_delay_seconds": "Arrival delay (seconds)",
+          "critical_notification": "Override Focus mode (iOS)"
         },
         "data_description": {
           "snooze_minutes": "How long to wait after tapping Snooze before sending another reminder.",
           "repeat_interval_minutes": "How long to wait between automatic reminders when a notification is ignored.",
           "max_repeats": "Stop reminding after this many attempts.",
-          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Set to 0 to notify immediately."
+          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Set to 0 to notify immediately.",
+          "critical_notification": "Send notifications as time-sensitive so they break through Focus mode and Do Not Disturb on iOS."
         }
       }
     }
