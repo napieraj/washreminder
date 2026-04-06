@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, patch
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
@@ -16,8 +18,12 @@ from custom_components.washreminder.const import (
     CONF_NOTIFY_TARGET,
     CONF_PERSON,
     CONF_TRIGGER_ENTITY,
+    CONF_TRIGGER_MODE,
     CONF_TRIGGER_STATE,
+    CONF_WASHDATA_ENTRY_ID,
     DOMAIN,
+    TRIGGER_MODE_BINARY_SENSOR,
+    TRIGGER_MODE_WASHDATA_EVENT,
 )
 
 
@@ -61,6 +67,17 @@ def _register_notify_service(hass: HomeAssistant) -> None:
     hass.services.async_register("notify", "mobile_app_phone", _dummy_notify)
 
 
+async def _select_manual_trigger_mode(hass, flow_id):
+    """Helper: select 'manual' in the trigger_mode step."""
+    result = await hass.config_entries.flow.async_configure(
+        flow_id,
+        user_input={CONF_TRIGGER_MODE: "manual"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "pick_trigger"
+    return result
+
+
 async def test_config_flow_binary_through_timing(
     hass: HomeAssistant,
     mock_setup_entry,
@@ -73,7 +90,9 @@ async def test_config_flow_binary_through_timing(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "pick_trigger"
+    assert result["step_id"] == "trigger_mode"
+
+    result = await _select_manual_trigger_mode(hass, result["flow_id"])
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -99,6 +118,7 @@ async def test_config_flow_binary_through_timing(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Wash Reminder"
     assert result["data"][CONF_TRIGGER_STATE] == ""
+    assert result["data"][CONF_TRIGGER_MODE] == TRIGGER_MODE_BINARY_SENSOR
     mock_setup_entry.assert_called_once()
 
 
@@ -112,6 +132,7 @@ async def test_config_flow_sensor_requires_completion_state(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    result = await _select_manual_trigger_mode(hass, result["flow_id"])
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={CONF_TRIGGER_ENTITY: "sensor.wm_state"},
@@ -139,6 +160,7 @@ async def test_config_flow_door_adds_options_step(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    result = await _select_manual_trigger_mode(hass, result["flow_id"])
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={CONF_TRIGGER_ENTITY: "binary_sensor.wm"},
@@ -183,6 +205,7 @@ async def test_notify_service_without_entity_registry(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    result = await _select_manual_trigger_mode(hass, result["flow_id"])
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={CONF_TRIGGER_ENTITY: "binary_sensor.wm"},
@@ -196,3 +219,100 @@ async def test_notify_service_without_entity_registry(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "timing"
+
+
+async def test_config_flow_washdata_event_through_timing(
+    hass: HomeAssistant,
+    mock_setup_entry,
+) -> None:
+    """WashData event mode skips entity selection and goes straight to presence."""
+    hass.states.async_set("person.someone", "home")
+    _register_notify_service(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["step_id"] == "trigger_mode"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_TRIGGER_MODE: TRIGGER_MODE_WASHDATA_EVENT},
+    )
+    assert result["step_id"] == "washdata_device"
+
+    # No washdata entries exist — proceed with "All devices" (empty string).
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_WASHDATA_ENTRY_ID: ""},
+    )
+    assert result["step_id"] == "presence_notify_door"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_PERSON: "person.someone",
+            CONF_NOTIFY_TARGET: "notify.mobile_app_phone",
+        },
+    )
+    assert result["step_id"] == "timing"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TRIGGER_MODE] == TRIGGER_MODE_WASHDATA_EVENT
+    assert CONF_TRIGGER_ENTITY not in result["data"]
+    assert result["data"][CONF_WASHDATA_ENTRY_ID] == ""
+    mock_setup_entry.assert_called_once()
+
+
+async def test_config_flow_washdata_event_with_device(
+    hass: HomeAssistant,
+    mock_setup_entry,
+) -> None:
+    """WashData event mode with a discovered device pre-selects entry_id."""
+    hass.states.async_set("person.someone", "home")
+    _register_notify_service(hass)
+
+    # Create a mock ha_washdata config entry so discovery finds it.
+    washdata_entry = MockConfigEntry(
+        domain="ha_washdata",
+        title="Washing Machine",
+        data={"name": "Washing Machine"},
+    )
+    washdata_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_TRIGGER_MODE: TRIGGER_MODE_WASHDATA_EVENT},
+    )
+    assert result["step_id"] == "washdata_device"
+
+    # Select the discovered device.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_WASHDATA_ENTRY_ID: washdata_entry.entry_id},
+    )
+    assert result["step_id"] == "presence_notify_door"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_PERSON: "person.someone",
+            CONF_NOTIFY_TARGET: "notify.mobile_app_phone",
+        },
+    )
+    assert result["step_id"] == "timing"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TRIGGER_MODE] == TRIGGER_MODE_WASHDATA_EVENT
+    assert result["data"][CONF_WASHDATA_ENTRY_ID] == washdata_entry.entry_id
+    mock_setup_entry.assert_called_once()

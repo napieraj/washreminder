@@ -28,15 +28,21 @@ from .const import (
     CONF_REPEAT_INTERVAL_MINUTES,
     CONF_SNOOZE_MINUTES,
     CONF_TRIGGER_ENTITY,
+    CONF_TRIGGER_MODE,
     CONF_TRIGGER_STATE,
+    CONF_WASHDATA_ENTRY_ID,
     DEFAULT_ARRIVAL_DELAY_SECONDS,
     DEFAULT_MAX_REPEATS,
     DEFAULT_REPEAT_INTERVAL_MINUTES,
     DEFAULT_SNOOZE_MINUTES,
     DOMAIN,
+    EVENT_WASHDATA_CYCLE_ENDED,
     NOTIFICATION_TAG,
     STORAGE_KEY,
     STORAGE_VERSION,
+    TRIGGER_MODE_BINARY_SENSOR,
+    TRIGGER_MODE_STATE_SENSOR,
+    TRIGGER_MODE_WASHDATA_EVENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,15 +98,28 @@ class WashReminderCoordinator:
         # parameters without touching the immutable config-flow data.
         config: dict[str, Any] = {**entry.data, **entry.options}
 
-        self._trigger_entity: str = config[CONF_TRIGGER_ENTITY]
+        self._trigger_entity: str = config.get(CONF_TRIGGER_ENTITY, "")
         self._trigger_state: str = config.get(CONF_TRIGGER_STATE, "")
 
-        # Determine trigger mode once at init — avoids repeated string parsing
-        # inside the hot-path state-change callback. Domain-only: state sensors
-        # always use completion-state logic; binary sensors always use on→off.
-        self._is_binary_sensor: bool = self._trigger_entity.startswith(
-            "binary_sensor."
+        # Determine trigger mode — explicit from config, with backwards-compat
+        # inference for entries created before the trigger_mode field existed.
+        stored_mode = config.get(CONF_TRIGGER_MODE, "")
+        if stored_mode:
+            self._trigger_mode_value: str = stored_mode
+        elif self._trigger_entity.startswith("binary_sensor."):
+            self._trigger_mode_value = TRIGGER_MODE_BINARY_SENSOR
+        elif self._trigger_entity:
+            self._trigger_mode_value = TRIGGER_MODE_STATE_SENSOR
+        else:
+            self._trigger_mode_value = TRIGGER_MODE_WASHDATA_EVENT
+
+        self._is_binary_sensor: bool = (
+            self._trigger_mode_value == TRIGGER_MODE_BINARY_SENSOR
         )
+        self._is_washdata_event: bool = (
+            self._trigger_mode_value == TRIGGER_MODE_WASHDATA_EVENT
+        )
+        self._washdata_entry_id: str = config.get(CONF_WASHDATA_ENTRY_ID, "")
 
         self._person: str = config[CONF_PERSON]
 
@@ -175,16 +194,18 @@ class WashReminderCoordinator:
     @property
     def trigger_entity(self) -> str:
         """Return the trigger entity ID."""
-        return self._trigger_entity
+        return self._trigger_entity or "(washdata event)"
 
     @property
     def trigger_mode(self) -> str:
-        """Return 'binary_sensor' or 'state_sensor'."""
-        return "binary_sensor" if self._is_binary_sensor else "state_sensor"
+        """Return 'binary_sensor', 'state_sensor', or 'washdata_event'."""
+        return self._trigger_mode_value
 
     @property
     def trigger_state_display(self) -> str:
         """Return the trigger state value for display purposes."""
+        if self._is_washdata_event:
+            return "ha_washdata_cycle_ended event"
         return "on→off" if self._is_binary_sensor else self._trigger_state
 
     @property
@@ -249,15 +270,16 @@ class WashReminderCoordinator:
     async def async_setup(self) -> None:
         """Validate entities, load persisted state, load translations, register listeners."""
 
-        # If WashData hasn't loaded yet, ConfigEntryNotReady triggers HA's
-        # exponential backoff retry.
-        trigger_state = self._hass.states.get(self._trigger_entity)
-        if trigger_state is None:
-            raise ConfigEntryNotReady(
-                translation_domain=DOMAIN,
-                translation_key="trigger_entity_not_found",
-                translation_placeholders={"entity": self._trigger_entity},
-            )
+        # Validate trigger entity (entity modes only — washdata event mode
+        # has no entity to validate).
+        if not self._is_washdata_event:
+            trigger_state = self._hass.states.get(self._trigger_entity)
+            if trigger_state is None:
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="trigger_entity_not_found",
+                    translation_placeholders={"entity": self._trigger_entity},
+                )
 
         if self._hass.states.get(self._person) is None:
             raise ConfigEntryNotReady(
@@ -286,12 +308,19 @@ class WashReminderCoordinator:
             self._pending = stored.get("pending", False)
             _LOGGER.debug("Restored pending state: %s", self._pending)
 
-        # Trigger entity listener: always active, minimal IO when idle.
-        self._entry.async_on_unload(
-            async_track_state_change_event(
-                self._hass, self._trigger_entity, self._on_trigger_state_change
+        # Trigger listener: always active, minimal IO when idle.
+        if self._is_washdata_event:
+            self._entry.async_on_unload(
+                self._hass.bus.async_listen(
+                    EVENT_WASHDATA_CYCLE_ENDED, self._on_washdata_cycle_ended
+                )
             )
-        )
+        else:
+            self._entry.async_on_unload(
+                async_track_state_change_event(
+                    self._hass, self._trigger_entity, self._on_trigger_state_change
+                )
+            )
 
         # Door contact sensor listener: always active (if configured).
         if self._door_sensor:
@@ -386,6 +415,27 @@ class WashReminderCoordinator:
     # ------------------------------------------------------------------
 
     @callback
+    def _handle_cycle_complete(self) -> None:
+        """Common logic for all trigger modes when a cycle finishes."""
+        self._cancel_delivery_task()
+
+        person_state = self._hass.states.get(self._person)
+        if person_state and person_state.state == "home":
+            _LOGGER.debug("Person is home — sending reminder now")
+            self._start_loop()
+        else:
+            _LOGGER.debug("Person is away — saving pending state, will notify on arrival")
+            self._pending = True
+            self._subscribe_person()
+            self._entry.async_create_background_task(
+                self._hass,
+                self._persist_pending(True),
+                name="washreminder_set_pending",
+            )
+
+        self.async_update_listeners()
+
+    @callback
     def _on_trigger_state_change(self, event: Event) -> None:
         """Handle washer trigger entity state changes."""
         old = event.data.get("old_state")
@@ -415,25 +465,22 @@ class WashReminderCoordinator:
             new.state,
         )
 
-        # Cancel any in-flight delivery task from a previous cycle to prevent
-        # the old delivery from spawning a second notification loop.
-        self._cancel_delivery_task()
+        self._handle_cycle_complete()
 
-        person_state = self._hass.states.get(self._person)
-        if person_state and person_state.state == "home":
-            _LOGGER.debug("Person is home — sending reminder now")
-            self._start_loop()
-        else:
-            _LOGGER.debug("Person is away — saving pending state, will notify on arrival")
-            self._pending = True
-            self._subscribe_person()
-            self._entry.async_create_background_task(
-                self._hass,
-                self._persist_pending(True),
-                name="washreminder_set_pending",
-            )
+    @callback
+    def _on_washdata_cycle_ended(self, event: Event) -> None:
+        """Handle ha_washdata_cycle_ended events from the event bus."""
+        if self._washdata_entry_id:
+            if event.data.get("entry_id") != self._washdata_entry_id:
+                return
 
-        self.async_update_listeners()
+        _LOGGER.debug(
+            "WashData cycle ended: device=%s, program=%s",
+            event.data.get("device_name", "unknown"),
+            event.data.get("program", "unknown"),
+        )
+
+        self._handle_cycle_complete()
 
     @callback
     def _on_person_state_change(self, event: Event) -> None:

@@ -1,6 +1,26 @@
 {
   "config": {
     "step": {
+      "trigger_mode": {
+        "title": "Trigger mode",
+        "description": "Choose how Wash Reminder detects when a cycle finishes.",
+        "data": {
+          "trigger_mode": "Trigger mode"
+        },
+        "data_description": {
+          "trigger_mode": "WashData event listens for cycle-ended events automatically — no entity selection needed. Choose manual to pick a specific sensor entity."
+        }
+      },
+      "washdata_device": {
+        "title": "WashData device",
+        "description": "Choose which WashData device triggers reminders.",
+        "data": {
+          "washdata_entry_id": "Device"
+        },
+        "data_description": {
+          "washdata_entry_id": "Select a specific device, or choose All devices to trigger on any WashData cycle."
+        }
+      },
       "pick_trigger": {
         "title": "Cycle completion",
         "description": "Choose the sensor that means the wash cycle has finished. You will set person, notifications, and optional door sensor next; timing is the last step.",

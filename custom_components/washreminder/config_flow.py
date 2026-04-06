@@ -18,14 +18,80 @@ from .const import (
     CONF_REPEAT_INTERVAL_MINUTES,
     CONF_SNOOZE_MINUTES,
     CONF_TRIGGER_ENTITY,
+    CONF_TRIGGER_MODE,
     CONF_TRIGGER_STATE,
+    CONF_WASHDATA_ENTRY_ID,
     DEFAULT_ARRIVAL_DELAY_SECONDS,
     DEFAULT_BINARY_SENSOR_TRIGGER_STATE,
     DEFAULT_MAX_REPEATS,
     DEFAULT_REPEAT_INTERVAL_MINUTES,
     DEFAULT_SNOOZE_MINUTES,
     DOMAIN,
+    TRIGGER_MODE_BINARY_SENSOR,
+    TRIGGER_MODE_STATE_SENSOR,
+    TRIGGER_MODE_WASHDATA_EVENT,
+    WASHDATA_DOMAIN,
 )
+
+
+def _trigger_mode_schema(defaults: dict) -> vol.Schema:
+    """Schema for the trigger mode selection step."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_TRIGGER_MODE,
+                default=defaults.get(CONF_TRIGGER_MODE, TRIGGER_MODE_WASHDATA_EVENT),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=TRIGGER_MODE_WASHDATA_EVENT,
+                            label="WashData event (automatic)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="manual",
+                            label="Manual entity selection",
+                        ),
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+        }
+    )
+
+
+def _washdata_device_schema(
+    hass: HomeAssistant, defaults: dict
+) -> vol.Schema:
+    """Schema for the WashData device selection step."""
+    entries = hass.config_entries.async_entries(WASHDATA_DOMAIN)
+
+    options: list[selector.SelectOptionDict] = [
+        selector.SelectOptionDict(value="", label="All devices"),
+    ]
+    options.extend(
+        selector.SelectOptionDict(value=entry.entry_id, label=entry.title)
+        for entry in entries
+    )
+
+    # Pre-select: if one device exists, default to it; otherwise "All devices".
+    default = defaults.get(CONF_WASHDATA_ENTRY_ID, "")
+    if not default and len(entries) == 1:
+        default = entries[0].entry_id
+
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_WASHDATA_ENTRY_ID,
+                default=default,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+    )
 
 
 def _pick_trigger_schema(defaults: dict) -> vol.Schema:
@@ -220,7 +286,7 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reconfigure_mode: bool = False
 
     async def async_step_user(self, user_input=None):
-        """Start setup: pick cycle-completion entity."""
+        """Start setup: pick trigger mode."""
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
@@ -228,7 +294,45 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not self._entity_data:
             self._entity_data = {}
 
-        return await self.async_step_pick_trigger(user_input)
+        return await self.async_step_trigger_mode(user_input)
+
+    async def async_step_trigger_mode(self, user_input=None):
+        """Choose between WashData event or manual entity selection."""
+        if user_input is not None:
+            mode = user_input[CONF_TRIGGER_MODE]
+            if mode == TRIGGER_MODE_WASHDATA_EVENT:
+                self._entity_data[CONF_TRIGGER_MODE] = TRIGGER_MODE_WASHDATA_EVENT
+                self._entity_data.pop(CONF_TRIGGER_ENTITY, None)
+                self._entity_data.pop(CONF_TRIGGER_STATE, None)
+                return await self.async_step_washdata_device(None)
+            # Manual mode — clear washdata fields, proceed to entity picker.
+            self._entity_data.pop(CONF_WASHDATA_ENTRY_ID, None)
+            return await self.async_step_pick_trigger(None)
+
+        # Infer default for reconfigure: if entry already has a trigger mode,
+        # use it; otherwise check for trigger_entity to decide.
+        default_mode = self._entity_data.get(CONF_TRIGGER_MODE, "")
+        if not default_mode and self._entity_data.get(CONF_TRIGGER_ENTITY):
+            default_mode = "manual"
+        defaults = {CONF_TRIGGER_MODE: default_mode} if default_mode else {}
+
+        return self.async_show_form(
+            step_id="trigger_mode",
+            data_schema=_trigger_mode_schema(defaults),
+        )
+
+    async def async_step_washdata_device(self, user_input=None):
+        """Select which WashData device triggers reminders."""
+        if user_input is not None:
+            self._entity_data[CONF_WASHDATA_ENTRY_ID] = user_input.get(
+                CONF_WASHDATA_ENTRY_ID, ""
+            )
+            return await self.async_step_presence_notify_door(None)
+
+        return self.async_show_form(
+            step_id="washdata_device",
+            data_schema=_washdata_device_schema(self.hass, self._entity_data),
+        )
 
     async def async_step_pick_trigger(self, user_input=None):
         """Select binary_sensor or sensor for cycle completion."""
@@ -239,7 +343,9 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._entity_data[CONF_TRIGGER_ENTITY] = entity_id
             if entity_id.startswith("binary_sensor."):
                 self._entity_data[CONF_TRIGGER_STATE] = ""
+                self._entity_data[CONF_TRIGGER_MODE] = TRIGGER_MODE_BINARY_SENSOR
                 return await self.async_step_presence_notify_door(None)
+            self._entity_data[CONF_TRIGGER_MODE] = TRIGGER_MODE_STATE_SENSOR
             return await self.async_step_trigger_state(None)
 
         return self.async_show_form(
@@ -336,7 +442,7 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._reconfigure_mode = True
             self._entity_data = dict(self._get_reconfigure_entry().data)
 
-        return await self.async_step_pick_trigger(user_input)
+        return await self.async_step_trigger_mode(user_input)
 
     @staticmethod
     @callback
