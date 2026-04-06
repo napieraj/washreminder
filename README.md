@@ -128,7 +128,7 @@ logger:
 
 ## Requirements
 
-- Home Assistant **2026.1.0** or newer (betas from **2026.1.0b0** are supported; see [HACS version notes](https://hacs.xyz/docs/publish/start/#versions))
+- Home Assistant **2026.1.0** or newer (betas from **2026.1.0b1** are supported; see [HACS version notes](https://hacs.xyz/docs/publish/start/#versions))
 - [ha_washdata](https://github.com/3dg1luk43/ha_washdata) installed and configured
 - Home Assistant Companion App (iOS or Android) with notification actions enabled, providing at least one **notify.*** entity
 

@@ -27,7 +27,7 @@ Pre-release (HACS: enable **Show beta versions** for this repository). Tag **`v1
 
 ### Changed
 
-- Minimum Home Assistant **2026.1.0** (`manifest.json`); HACS metadata uses **2026.1.0b0** so Home Assistant beta installs satisfy the checker.
+- Minimum Home Assistant **2026.1.0** (HACS metadata uses **2026.1.0b1** so Home Assistant beta installs satisfy the checker).
 - README: badges, my.home-assistant.io link, wizard + entity documentation.
 - CI: **Hassfest** job alongside HACS validation.
 
