@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.0] - 2026-04-06
+
+### Added
+
+- **WashData event trigger mode** — listens for `ha_washdata_cycle_ended` events from the [ha_washdata](https://github.com/3dg1luk43/ha_washdata) integration instead of watching a sensor entity. Trigger entity is now optional when using this mode. *(Recommended for ha_washdata users.)*
+- **iOS notification action icons** — SF Symbols icons on Snooze (`clock.arrow.circlepath`) and Done (`checkmark.circle.fill`) notification action buttons.
+- **iOS Focus mode override toggle** — option to disable the `time-sensitive` interruption level for users who don't want notifications to break through Focus mode.
+- **Notify service compatibility** — support for notify services without entity registry entries (e.g. legacy `notify.mobile_app_*` services).
+
+### Fixed
+
+- Notify entity selector not showing iOS mobile app targets.
+- HACS zip file creation producing a double-nested directory structure.
+- Manifest version preventing integration from appearing in HA discovery.
+
+### Changed
+
+- Release workflow now derives the version from the git tag instead of `manifest.json`.
+- Added setup screenshots and updated README documentation.
+
+---
+
 ## [1.2.0b1] - 2026-04-06
 
 ### Fixed
