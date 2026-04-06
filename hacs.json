@@ -2,7 +2,7 @@
   "name": "Wash Reminder",
   "content_in_root": false,
   "render_readme": true,
-  "homeassistant": "2026.1.0b0",
+  "homeassistant": "2026.1.0b1",
   "zip_release": true,
   "filename": "washreminder.zip",
   "hacs": "2.0.0"
