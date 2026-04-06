@@ -615,8 +615,16 @@ class WashReminderCoordinator:
                 extra: dict[str, Any] = {
                     "tag": NOTIFICATION_TAG,
                     "actions": [
-                        {"action": ACTION_SNOOZE, "title": self._t("action_snooze")},
-                        {"action": ACTION_DONE, "title": self._t("action_done")},
+                        {
+                            "action": ACTION_SNOOZE,
+                            "title": self._t("action_snooze"),
+                            "icon": "sfsymbols:clock.arrow.circlepath",
+                        },
+                        {
+                            "action": ACTION_DONE,
+                            "title": self._t("action_done"),
+                            "icon": "sfsymbols:checkmark.circle.fill",
+                        },
                     ],
                 }
                 if self._critical_notification:
