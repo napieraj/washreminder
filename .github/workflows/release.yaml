@@ -15,6 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Inject version from tag into manifest.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' \
+            custom_components/washreminder/manifest.json > tmp.json \
+            && mv tmp.json custom_components/washreminder/manifest.json
       - name: Build HACS zip
         run: |
           (cd custom_components && zip -rq ../washreminder.zip washreminder \
@@ -25,6 +31,6 @@ jobs:
           files: washreminder.zip
           # Mark beta/rc tags as GitHub pre-releases so HACS can offer them when "Show beta versions" is on.
           prerelease: ${{ contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
-          # Tag must match manifest.json version without the v prefix.
+          # Version is derived from the git tag automatically.
           # Stable: git tag v1.2.0 && git push origin v1.2.0
           # Beta:   git tag v1.2.0b0 && git push origin v1.2.0b0
