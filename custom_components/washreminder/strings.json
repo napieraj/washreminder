@@ -1,0 +1,108 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Entities",
+        "description": "Select the entities that Wash Reminder will monitor. Timing is configured in the next step.",
+        "data": {
+          "trigger_entity": "Cycle completion sensor",
+          "trigger_state": "Completion state value",
+          "person_entity_id": "Person",
+          "notify_target": "Notification service",
+          "door_sensor_entity_id": "Door sensor",
+          "door_sensor_inverted": "Invert door sensor"
+        },
+        "data_description": {
+          "trigger_entity": "The WashData sensor that indicates when a cycle has finished. Use the binary sensor for the simplest setup, or a state sensor if you need to trigger on a specific state value.",
+          "trigger_state": "Only for state sensors — enter the exact value that means the cycle is done (e.g. Idle). Case-sensitive. Leave empty when using a binary sensor.",
+          "person_entity_id": "Notifications are held until this person arrives home.",
+          "notify_target": "The mobile app notification service, e.g. notify.mobile_app_yourphone. Works with or without the notify. prefix.",
+          "door_sensor_entity_id": "Optional. A contact sensor on the machine door. Opening the door automatically cancels any pending reminders.",
+          "door_sensor_inverted": "Most contact sensors report \"on\" when the door is open. Turn this on if your sensor works the other way around — you'll know because reminders will cancel when you close the door instead of when you open it."
+        }
+      },
+      "timing": {
+        "title": "Timing",
+        "description": "Set how often and how long reminders repeat. All of these can be changed later without reinstalling.",
+        "data": {
+          "snooze_minutes": "Snooze duration (minutes)",
+          "repeat_interval_minutes": "Repeat interval (minutes)",
+          "max_repeats": "Maximum reminders",
+          "arrival_delay_seconds": "Arrival delay (seconds)"
+        },
+        "data_description": {
+          "snooze_minutes": "How long to wait after tapping Snooze before sending another reminder.",
+          "repeat_interval_minutes": "How long to wait between automatic reminders when a notification is ignored.",
+          "max_repeats": "Stop reminding after this many attempts. At the default 30-minute interval, 10 reminders span about 5 hours.",
+          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Gives your phone time to reconnect to WiFi. Set to 0 to notify immediately."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure",
+        "description": "Update entity settings. The integration reloads automatically after saving.",
+        "data": {
+          "trigger_entity": "Cycle completion sensor",
+          "trigger_state": "Completion state value",
+          "person_entity_id": "Person",
+          "notify_target": "Notification service",
+          "door_sensor_entity_id": "Door sensor",
+          "door_sensor_inverted": "Invert door sensor"
+        },
+        "data_description": {
+          "trigger_entity": "The WashData sensor that indicates when a cycle has finished.",
+          "trigger_state": "Only for state sensors — enter the exact value that means the cycle is done (e.g. Idle). Leave empty when using a binary sensor.",
+          "person_entity_id": "Notifications are held until this person arrives home.",
+          "notify_target": "The mobile app notification service, e.g. notify.mobile_app_yourphone.",
+          "door_sensor_entity_id": "Optional. A contact sensor on the machine door. Opening the door automatically cancels any pending reminders.",
+          "door_sensor_inverted": "Most contact sensors report \"on\" when the door is open. Turn this on if your sensor works the other way around — you'll know because reminders will cancel when you close the door instead of when you open it."
+        }
+      }
+    },
+    "error": {
+      "notify_service_not_found": "Notification service not found. Check that the Companion App is set up and the service name is correct (e.g. mobile_app_yourphone).",
+      "trigger_state_required": "Enter the exact completion state for this sensor (e.g. Idle). Case-sensitive — check Developer Tools → States."
+    },
+    "abort": {
+      "already_configured": "Wash Reminder is already configured.",
+      "reconfigure_successful": "Configuration updated successfully."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timing",
+        "description": "Adjust reminder timing. Changes take effect immediately.",
+        "data": {
+          "snooze_minutes": "Snooze duration (minutes)",
+          "repeat_interval_minutes": "Repeat interval (minutes)",
+          "max_repeats": "Maximum reminders",
+          "arrival_delay_seconds": "Arrival delay (seconds)"
+        },
+        "data_description": {
+          "snooze_minutes": "How long to wait after tapping Snooze before sending another reminder.",
+          "repeat_interval_minutes": "How long to wait between automatic reminders when a notification is ignored.",
+          "max_repeats": "Stop reminding after this many attempts.",
+          "arrival_delay_seconds": "How long to wait after arriving home before sending the notification. Set to 0 to notify immediately."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "trigger_entity_not_found": {
+      "message": "Could not find {entity}. Make sure ha_washdata is installed and has finished loading before Wash Reminder starts."
+    },
+    "person_entity_not_found": {
+      "message": "Could not find {entity}. Check your person configuration under Settings → People."
+    },
+    "door_sensor_not_found": {
+      "message": "Could not find {entity}. Verify the entity ID under Developer Tools → States."
+    }
+  },
+  "notify": {
+    "title": "🧺 Laundry Done",
+    "cycle_complete": "Time to empty the washing machine.",
+    "reminder_escalation": "The laundry is still waiting. (Reminder {count})",
+    "action_snooze": "Snooze",
+    "action_done": "Done ✓"
+  }
+}

@@ -1,0 +1,49 @@
+# Home Assistant Integration Quality Scale declaration.
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+
+rules:
+  # Bronze
+  action-setup: exempt             # No custom actions registered
+  appropriate-polling: done        # Pure push — async_track_state_change_event, no polling
+  brands: exempt                   # HACS custom integration, not in core brands repo
+  common-modules: exempt           # No DataUpdateCoordinator pattern (push-only)
+  config-flow: done
+  config-flow-test-coverage: done   # tests/test_config_flow.py
+  dependency-transparency: done    # No external Python packages
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  entity-event-setup: done         # Listeners registered in async_setup, torn down via async_on_unload
+  entity-unique-id: exempt         # Integration creates no entities
+  has-entity-name: exempt          # No entities
+  icon: exempt                     # No entities; integration_type=service
+  log-when-unavailable: done       # ConfigEntryNotReady raised when entities missing
+  reconfiguration-flow: done       # async_step_reconfigure implemented
+  test-before-setup: done          # Entity existence validated in coordinator.async_setup
+  unique-config-entry: done        # async_set_unique_id(DOMAIN) + _abort_if_unique_id_configured
+
+  # Silver
+  docs-actions: exempt             # No custom actions
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: exempt       # No entities
+  exception-translations: done     # ConfigEntryNotReady with translation_domain/key/placeholders
+  icon-translations: exempt        # No entities
+  parallel-updates: exempt         # No polling, no platforms
+  reauthentication-flow: exempt    # No authentication required
+  repair-issues: todo
+  stale-devices: exempt            # No devices created
+
+  # Gold
+  diagnostics: done                # diagnostics.py with async_get_config_entry_diagnostics
+  discovery-update-info: exempt    # Not a discovered integration
+  docs-automatic-discovery: exempt
+  docs-examples: todo
+  entity-category: exempt          # No entities
+  entity-disabled-by-default: exempt
+  entity-translations: exempt      # No entities
+  inject-websession: exempt        # No HTTP requests
+  integration-owner: done
+
+  # Platinum
+  async-dependency: exempt         # No external libraries
+  strict-typing: done              # py.typed present; PEP 695 type aliases used
