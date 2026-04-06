@@ -6,7 +6,6 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.washreminder.config_flow import (
     _validate_trigger_state_for_sensor,
@@ -53,14 +52,8 @@ def mock_setup_entry():
         yield mock
 
 
-def _register_notify_entity(hass: HomeAssistant, registry: er.EntityRegistry) -> None:
-    """Create a notify.* registry entry and matching notify service (tests)."""
-    registry.async_get_or_create(
-        domain="notify",
-        platform="test",
-        unique_id="washreminder_test_notify",
-        suggested_object_id="mobile_app_phone",
-    )
+def _register_notify_service(hass: HomeAssistant) -> None:
+    """Register a notify service for tests (no entity registry entry needed)."""
 
     async def _dummy_notify(_call) -> None:
         return
@@ -70,12 +63,11 @@ def _register_notify_entity(hass: HomeAssistant, registry: er.EntityRegistry) ->
 
 async def test_config_flow_binary_through_timing(
     hass: HomeAssistant,
-    entity_registry: er.EntityRegistry,
     mock_setup_entry,
 ) -> None:
     hass.states.async_set("binary_sensor.wm", "off")
     hass.states.async_set("person.someone", "home")
-    _register_notify_entity(hass, entity_registry)
+    _register_notify_service(hass)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -112,11 +104,10 @@ async def test_config_flow_binary_through_timing(
 
 async def test_config_flow_sensor_requires_completion_state(
     hass: HomeAssistant,
-    entity_registry: er.EntityRegistry,
 ) -> None:
     hass.states.async_set("sensor.wm_state", "Idle")
     hass.states.async_set("person.someone", "home")
-    _register_notify_entity(hass, entity_registry)
+    _register_notify_service(hass)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -138,13 +129,12 @@ async def test_config_flow_sensor_requires_completion_state(
 
 async def test_config_flow_door_adds_options_step(
     hass: HomeAssistant,
-    entity_registry: er.EntityRegistry,
     mock_setup_entry,
 ) -> None:
     hass.states.async_set("binary_sensor.wm", "off")
     hass.states.async_set("person.someone", "home")
     hass.states.async_set("binary_sensor.door", "off")
-    _register_notify_entity(hass, entity_registry)
+    _register_notify_service(hass)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -176,3 +166,33 @@ async def test_config_flow_door_adds_options_step(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["door_sensor_inverted"] is True
     assert result["data"][CONF_DOOR_SENSOR] == "binary_sensor.door"
+
+
+async def test_notify_service_without_entity_registry(
+    hass: HomeAssistant,
+    mock_setup_entry,
+) -> None:
+    """iOS companion app notify targets exist only as services, not in entity registry."""
+    hass.states.async_set("binary_sensor.wm", "off")
+    hass.states.async_set("person.someone", "home")
+    # Only register the service — no entity registry entry (iOS scenario)
+    hass.services.async_register(
+        "notify", "mobile_app_iphone", AsyncMock(return_value=None)
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_TRIGGER_ENTITY: "binary_sensor.wm"},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_PERSON: "person.someone",
+            CONF_NOTIFY_TARGET: "notify.mobile_app_iphone",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "timing"

@@ -6,7 +6,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
@@ -57,7 +56,9 @@ def _trigger_state_schema(defaults: dict) -> vol.Schema:
     )
 
 
-def _presence_notify_door_schema(defaults: dict) -> vol.Schema:
+def _presence_notify_door_schema(
+    hass: HomeAssistant, defaults: dict
+) -> vol.Schema:
     """Person, notify entity, optional door sensor."""
     door_default = defaults.get(CONF_DOOR_SENSOR)
     if door_default:
@@ -68,6 +69,19 @@ def _presence_notify_door_schema(defaults: dict) -> vol.Schema:
     else:
         door_key = vol.Optional(CONF_DOOR_SENSOR)
 
+    # Build notify options from registered services so that targets without
+    # entity-registry entries (e.g. iOS Companion App) still appear.
+    notify_services = hass.services.async_services().get("notify", {})
+    notify_options = sorted(
+        [
+            selector.SelectOptionDict(
+                value=f"notify.{svc}", label=f"notify.{svc}"
+            )
+            for svc in notify_services
+        ],
+        key=lambda opt: opt["label"],
+    )
+
     return vol.Schema(
         {
             vol.Required(
@@ -77,7 +91,12 @@ def _presence_notify_door_schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_NOTIFY_TARGET,
                 default=defaults.get(CONF_NOTIFY_TARGET, ""),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="notify")),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=notify_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
             door_key: selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
@@ -160,7 +179,7 @@ def _notify_service_name(entity_id: str) -> str:
 def _validate_notify_target(
     hass: HomeAssistant, user_input: dict
 ) -> dict[str, str]:
-    """Ensure the notify entity exists and the legacy notify service is callable."""
+    """Ensure the notify service is callable."""
     errors: dict[str, str] = {}
     entity_id = (user_input.get(CONF_NOTIFY_TARGET) or "").strip()
     if not entity_id:
@@ -168,13 +187,6 @@ def _validate_notify_target(
         return errors
     if not entity_id.startswith("notify."):
         errors[CONF_NOTIFY_TARGET] = "notify_entity_invalid"
-        return errors
-
-    state = hass.states.get(entity_id)
-    registry = er.async_get(hass)
-    ent = registry.async_get(entity_id)
-    if state is None and ent is None:
-        errors[CONF_NOTIFY_TARGET] = "notify_entity_not_found"
         return errors
 
     service = _notify_service_name(entity_id)
@@ -274,7 +286,7 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         merged_defaults = {**self._entity_data, **(user_input or {})}
         return self.async_show_form(
             step_id="presence_notify_door",
-            data_schema=_presence_notify_door_schema(merged_defaults),
+            data_schema=_presence_notify_door_schema(self.hass, merged_defaults),
             errors=errors,
         )
 
