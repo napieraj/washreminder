@@ -110,6 +110,8 @@ Each reminder replaces the previous one on your phone — you'll never see a sta
 
 ## Trigger modes
 
+**WashData event** *(recommended)* — listens for `ha_washdata_cycle_ended` events fired by the [ha_washdata](https://github.com/3dg1luk43/ha_washdata) integration. No entity selection needed — cycle completion is detected automatically.
+
 **Binary sensor** — fires when the sensor turns off. WashData debounces this, so brief power dips during a soak phase won't cause false alerts.
 
 **State sensor** — fires when the sensor value changes to your configured completion state. Won't trigger on startup when the sensor goes from `unavailable` to `Idle`. Check the exact state string in **Developer tools → States** — it's case-sensitive.
