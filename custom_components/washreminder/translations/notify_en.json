@@ -1,0 +1,7 @@
+{
+  "title": "🧺 Laundry Done",
+  "cycle_complete": "Time to empty the washing machine.",
+  "reminder_escalation": "The laundry is still waiting. (Reminder {count})",
+  "action_snooze": "Snooze",
+  "action_done": "Done \u2713"
+}
