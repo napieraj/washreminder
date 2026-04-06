@@ -23,7 +23,7 @@ jobs:
             && mv tmp.json custom_components/washreminder/manifest.json
       - name: Build HACS zip
         run: |
-          (cd custom_components && zip -rq ../washreminder.zip washreminder \
+          (cd custom_components/washreminder && zip -rq ../../washreminder.zip . \
             -x "*__pycache__/*" -x "*.pyc" -x "*/.DS_Store")
       - uses: softprops/action-gh-release@v2
         with:
