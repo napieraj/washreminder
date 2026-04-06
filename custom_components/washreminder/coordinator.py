@@ -356,11 +356,10 @@ class WashReminderCoordinator:
         language = self._hass.config.language
 
         for lang in dict.fromkeys((language, "en")):
-            path = translations_dir / f"{lang}.json"
+            path = translations_dir / f"notify_{lang}.json"
             if path.is_file():
                 try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                    notify = data.get("notify", {})
+                    notify = json.loads(path.read_text(encoding="utf-8"))
                     if notify:
                         _LOGGER.debug("Loaded notification text from %s", path.name)
                         return notify
