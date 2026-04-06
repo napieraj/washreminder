@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.0b1] - 2026-04-06
+
+### Fixed
+
+- **Hassfest** — removed `homeassistant` key from `manifest.json` (no longer allowed by hassfest for custom integrations; minimum version is enforced via `hacs.json`).
+- **Hassfest** — moved notification text out of `strings.json` / `translations/en.json` into a dedicated `translations/notify_en.json` file (hassfest rejects the unrecognised `notify` top-level key).
+- **Hassfest** — sorted `manifest.json` keys alphabetically after `domain` / `name` as required by hassfest.
+
+---
+
 ## [1.2.0b0] - 2026-04-06
 
 Pre-release (HACS: enable **Show beta versions** for this repository). Tag **`v1.2.0b0`** — stable **`1.2.0`** will follow after beta feedback.
@@ -18,7 +28,7 @@ Pre-release (HACS: enable **Show beta versions** for this repository). Tag **`v1
 
 ### Changed
 
-- Minimum Home Assistant **2026.1.0** (HACS metadata uses **2026.1.0b1** so Home Assistant beta installs satisfy the checker).
+- Minimum Home Assistant **2026.1.0** (HACS metadata uses **2026.1.0b0** so Home Assistant beta installs satisfy the checker).
 - README: badges, my.home-assistant.io link, wizard + entity documentation.
 - CI: **Hassfest** job alongside HACS validation.
 
