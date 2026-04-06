@@ -3,7 +3,7 @@
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 [![GitHub release](https://img.shields.io/github/v/release/napieraj/washreminder?label=release)](https://github.com/napieraj/washreminder/releases)
 [![Validate](https://github.com/napieraj/washreminder/actions/workflows/validate.yaml/badge.svg)](https://github.com/napieraj/washreminder/actions/workflows/validate.yaml)
-[![License](https://img.shields.io/github/license/napieraj/washreminder)](LICENSE)
+[![License](https://img.shields.io/github/license/napieraj/washreminder)](https://github.com/napieraj/washreminder/blob/main/LICENSE)
 
 Keeps reminding you to empty the washing machine until you actually do it. Works with [ha_washdata](https://github.com/3dg1luk43/ha_washdata) — no helpers, scripts, or automations needed.
 
@@ -11,7 +11,9 @@ If you're not home when the cycle finishes, the notification waits and fires whe
 
 > **Tip:** Turn off WashData's built-in cycle-end notification to avoid getting two alerts at once.
 
-**Quick add in HACS:** [Open your Home Assistant instance and add the repository](https://my.home-assistant.io/redirect/hacs_repository/?owner=napieraj&repository=washreminder&category=integration).
+**Quick add via HACS:**
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=napieraj&repository=washreminder&category=integration)
 
 ---
 
@@ -33,32 +35,54 @@ Copy `custom_components/washreminder/` to your configuration directory and resta
 
 **Settings → Devices & services → Add integration → Wash Reminder**
 
-Setup is a short wizard:
+Setup is a short wizard that walks you through five steps. Only the relevant steps are shown depending on your choices.
 
-1. **Cycle completion** — binary sensor (recommended) or state sensor that indicates the cycle has ended.
-2. **Completion state** — shown only for **state** sensors: enter the exact done state (e.g. `Idle`). Skipped for binary sensors (they use on→off).
-3. **Person, notify, door** — person to wait for, a **notify.*** entity (Companion App), and optional door contact sensor.
-4. **Door sensor polarity** — shown only if you picked a door sensor.
-5. **Timing** — snooze, repeat interval, max reminders, arrival delay.
+### Step 1 — Trigger mode
 
-After installation, **Timing** can be changed under **Configure** on the integration card. **Entities** can be changed with **⋮ → Reconfigure** (same wizard, without the timing step).
+Choose how Wash Reminder detects that a cycle has finished. **WashData event** is the recommended option — it listens for cycle-ended events automatically with no entity selection needed. Choose **Manual entity selection** if you want to pick a specific binary or state sensor yourself.
 
-### Entities
+<p align="center">
+  <img src="img/setup_trigger.png" width="500" alt="Trigger mode selection — WashData event (automatic) or manual entity selection">
+</p>
 
-| Entity | Type | Notes |
-| ------ | ---- | ----- |
-| **Pending notification** | Binary sensor | On while a reminder is deferred until the configured person is home. |
-| **Activity** | Sensor (diagnostic) | High-level state: idle, deferred until home, waiting before delivery, or sending reminders. |
-| **Runtime** | Sensor (diagnostic) | Whether the integration is idle, listening for arrival, in the arrival delay, or running the reminder loop. |
+### Step 2 — Person, notify, door
 
-### Timing defaults (step 5)
+Select the person whose presence gates the notification, the notify entity to send reminders to (typically from the Companion App), and an optional door contact sensor. Opening the machine door cancels any pending or active reminders automatically.
 
-| Field           | Default | Description                                                                                          |
-| --------------- | ------- | ---------------------------------------------------------------------------------------------------- |
-| Snooze duration | 15 min  | How long to wait after tapping Snooze                                                                |
-| Repeat interval | 30 min  | Time between automatic reminders if ignored                                                          |
-| Max reminders   | 10      | Stop after this many attempts (~5 h at default interval)                                             |
-| Arrival delay   | 30 s    | Grace period for your phone to reconnect to WiFi after arriving home. Set to 0 to notify immediately |
+<p align="center">
+  <img src="img/setup_entities.png" width="500" alt="Person, notify entity, and optional door sensor selection">
+</p>
+
+### Step 3 — Timing
+
+Configure how often and how long reminders repeat. All of these can be changed later without reinstalling — go to the integration card and select **Configure**.
+
+<p align="center">
+  <img src="img/setup_timing.png" width="500" alt="Timing configuration — snooze, repeat interval, max reminders, arrival delay">
+</p>
+
+| Field | Default | Description |
+| --- | --- | --- |
+| Snooze duration | 15 min | How long to wait after tapping Snooze |
+| Repeat interval | 30 min | Time between automatic reminders if ignored |
+| Max reminders | 10 | Stop after this many attempts (~5 h at default interval) |
+| Arrival delay | 30 s | Grace period for your phone to reconnect to WiFi after arriving home. Set to 0 to notify immediately |
+
+> **Note:** Additional steps for **Completion state** and **Door sensor polarity** appear conditionally — only when you choose a state sensor or add a door sensor.
+
+### Reconfiguring after setup
+
+**Timing** can be changed anytime under **Configure** on the integration card. **Entities** (person, notify target, door sensor) can be changed with **⋮ → Reconfigure**, which re-runs the setup wizard without the timing step.
+
+---
+
+## Entities
+
+| Entity | Type | Description |
+| --- | --- | --- |
+| **Pending notification** | Binary sensor | On while a reminder is deferred until the configured person is home |
+| **Activity** | Sensor (diagnostic) | High-level state: idle, deferred until home, waiting before delivery, or sending reminders |
+| **Runtime** | Sensor (diagnostic) | Whether the integration is idle, listening for arrival, in the arrival delay, or running the reminder loop |
 
 ---
 
@@ -71,16 +95,14 @@ Time to empty the washing machine.
 [ Snooze ]   [ Done ✓ ]
 ```
 
-
-| What happens                     | What the integration does                                              |
-| -------------------------------- | ---------------------------------------------------------------------- |
-| You tap **Done ✓**               | Notification cleared, reminders stop                                   |
-| You tap **Snooze**               | Notification cleared, new reminder after the snooze duration           |
-| You ignore it                    | Another reminder at the repeat interval, with escalating text          |
-| You open the machine door        | Everything cancelled — active reminders, pending state, delivery tasks |
-| Cycle finishes while you're away | Saved to disk, notification sent when you get home                     |
-| HA restarts while waiting        | State restored, notification still sent on arrival                     |
-
+| What happens | What the integration does |
+| --- | --- |
+| You tap **Done ✓** | Notification cleared, reminders stop |
+| You tap **Snooze** | Notification cleared, new reminder after the snooze duration |
+| You ignore it | Another reminder at the repeat interval, with escalating text |
+| You open the machine door | Everything cancelled — active reminders, pending state, delivery tasks |
+| Cycle finishes while you're away | Saved to disk, notification sent when you get home |
+| HA restarts while waiting | State restored, notification still sent on arrival |
 
 Each reminder replaces the previous one on your phone — you'll never see a stack of duplicate notifications. Notifications break through Focus mode by default (iOS `time-sensitive`).
 
@@ -128,7 +150,7 @@ logger:
 
 ## Requirements
 
-- Home Assistant **2026.1.0** or newer (betas from **2026.1.0b0** are supported; see [HACS version notes](https://hacs.xyz/docs/publish/start/#versions))
+- Home Assistant **2026.1.0** or newer (betas from **2026.1.0b0** are supported)
 - [ha_washdata](https://github.com/3dg1luk43/ha_washdata) installed and configured
 - Home Assistant Companion App (iOS or Android) with notification actions enabled, providing at least one **notify.*** entity
 
@@ -138,4 +160,4 @@ logger:
 
 Issues and PRs welcome at [github.com/napieraj/washreminder](https://github.com/napieraj/washreminder).
 
-For [HACS default inclusion](https://hacs.xyz/docs/publish/include) checks, the GitHub repository needs a short **description**, relevant **topics** (for example `home-assistant`, `hacs`), and releases must include **`washreminder.zip`** (built automatically when you push a version tag; see [.github/workflows/release.yaml](.github/workflows/release.yaml)).
+For [HACS default inclusion](https://hacs.xyz/docs/publish/include) checks, the GitHub repository needs a short **description**, relevant **topics** (for example `home-assistant`, `hacs`), and releases must include **`washreminder.zip`** (built automatically when you push a version tag; see [.github/workflows/release.yaml](https://github.com/napieraj/washreminder/blob/main/.github/workflows/release.yaml)).
