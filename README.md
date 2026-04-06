@@ -1,9 +1,9 @@
 # Wash Reminder
 
-[![HACS Custom][hacs-badge]][hacs-url]
-[![HA Version][ha-badge]][ha-url]
-[![GitHub Release][release-badge]][release-url]
-[![License][license-badge]](LICENSE)
+[HACS Custom](https://hacs.xyz)
+[HA Version](https://www.home-assistant.io)
+[GitHub Release](https://github.com/napieraj/washreminder/releases)
+[License](LICENSE)
 
 Keeps reminding you to empty the washing machine until you actually do it. Works with [ha_washdata](https://github.com/3dg1luk43/ha_washdata) — no helpers, scripts, or automations needed.
 
@@ -33,23 +33,27 @@ Copy `custom_components/washreminder/` to your config directory and restart.
 
 ### Step 1 — Entities
 
-| Field | Description |
-|---|---|
-| Cycle completion sensor | `binary_sensor.washing_machine_running` (recommended) or a WashData state sensor |
-| Completion state value | Leave blank for binary sensors. For state sensors, enter the done value, e.g. `Idle` |
-| Person | Notifications are held until this person arrives home |
-| Notification service | `notify.mobile_app_yourphone` — checked at setup time |
-| Door sensor | Optional. A contact sensor on the machine door — opening it cancels all reminders |
-| Invert door sensor | See [Door sensor polarity](#door-sensor-polarity) below |
+
+| Field                   | Description                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| Cycle completion sensor | `binary_sensor.washing_machine_running` (recommended) or a WashData state sensor     |
+| Completion state value  | Leave blank for binary sensors. For state sensors, enter the done value, e.g. `Idle` |
+| Person                  | Notifications are held until this person arrives home                                |
+| Notification service    | `notify.mobile_app_yourphone` — checked at setup time                                |
+| Door sensor             | Optional. A contact sensor on the machine door — opening it cancels all reminders    |
+| Invert door sensor      | See [Door sensor polarity](#door-sensor-polarity) below                              |
+
 
 ### Step 2 — Timing
 
-| Field | Default | Description |
-|---|---|---|
-| Snooze duration | 15 min | How long to wait after tapping Snooze |
-| Repeat interval | 30 min | Time between automatic reminders if ignored |
-| Max reminders | 10 | Stop after this many attempts (~5 h at default interval) |
-| Arrival delay | 30 s | Grace period for your phone to reconnect to WiFi after arriving home. Set to 0 to notify immediately |
+
+| Field           | Default | Description                                                                                          |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| Snooze duration | 15 min  | How long to wait after tapping Snooze                                                                |
+| Repeat interval | 30 min  | Time between automatic reminders if ignored                                                          |
+| Max reminders   | 10      | Stop after this many attempts (~5 h at default interval)                                             |
+| Arrival delay   | 30 s    | Grace period for your phone to reconnect to WiFi after arriving home. Set to 0 to notify immediately |
+
 
 All timing settings can be changed later via **Configure** without reinstalling. Entity settings can be changed via **⋮ → Reconfigure**.
 
@@ -64,14 +68,16 @@ Time to empty the washing machine.
 [ Snooze ]   [ Done ✓ ]
 ```
 
-| What happens | What the integration does |
-|---|---|
-| You tap **Done ✓** | Notification cleared, reminders stop |
-| You tap **Snooze** | Notification cleared, new reminder after the snooze duration |
-| You ignore it | Another reminder at the repeat interval, with escalating text |
-| You open the machine door | Everything cancelled — active reminders, pending state, delivery tasks |
-| Cycle finishes while you're away | Saved to disk, notification sent when you get home |
-| HA restarts while waiting | State restored, notification still sent on arrival |
+
+| What happens                     | What the integration does                                              |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| You tap **Done ✓**               | Notification cleared, reminders stop                                   |
+| You tap **Snooze**               | Notification cleared, new reminder after the snooze duration           |
+| You ignore it                    | Another reminder at the repeat interval, with escalating text          |
+| You open the machine door        | Everything cancelled — active reminders, pending state, delivery tasks |
+| Cycle finishes while you're away | Saved to disk, notification sent when you get home                     |
+| HA restarts while waiting        | State restored, notification still sent on arrival                     |
+
 
 Each reminder replaces the previous one on your phone — you'll never see a stack of duplicate notifications. Notifications break through Focus mode by default (iOS `time-sensitive`).
 
@@ -127,10 +133,4 @@ logger:
 
 Issues and PRs welcome at [github.com/napieraj/washreminder](https://github.com/napieraj/washreminder).
 
-[hacs-badge]: https://img.shields.io/badge/HACS-Custom-41BDF5.svg
-[hacs-url]: https://hacs.xyz
-[ha-badge]: https://img.shields.io/badge/HA-2025.1%2B-blue.svg
-[ha-url]: https://www.home-assistant.io
-[release-badge]: https://img.shields.io/github/v/release/napieraj/washreminder
-[release-url]: https://github.com/napieraj/washreminder/releases
-[license-badge]: https://img.shields.io/github/license/napieraj/washreminder
+For [HACS default inclusion](https://hacs.xyz/docs/publish/include) checks, the GitHub repository needs a short **description**, relevant **topics** (for example `home-assistant`, `hacs`), and releases must include `**washreminder.zip`** (built automatically when you push a version tag; see `[.github/workflows/release.yaml](.github/workflows/release.yaml)`).
