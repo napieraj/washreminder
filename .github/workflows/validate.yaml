@@ -17,14 +17,24 @@ jobs:
           category: integration
 
   pytest:
-    name: Pytest
+    name: Pytest (${{ matrix.ha-channel }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ha-channel: [stable, beta]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install test dependencies
+      - name: Install test dependencies (stable)
+        if: matrix.ha-channel == 'stable'
         run: pip install -r requirements_test.txt
+      - name: Install test dependencies (Home Assistant pre-release)
+        if: matrix.ha-channel == 'beta'
+        run: |
+          pip install "pytest>=8" "pytest-asyncio>=0.23"
+          pip install --upgrade --pre homeassistant pytest-homeassistant-custom-component
       - name: Run tests
         run: pytest

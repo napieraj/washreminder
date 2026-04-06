@@ -30,7 +30,9 @@ rules:
   icon-translations: exempt        # No entities
   parallel-updates: exempt         # No polling, no platforms
   reauthentication-flow: exempt    # No authentication required
-  repair-issues: todo
+  # No DeviceEntry / device registry; no recoverable faults that fit Repairs UI.
+  # Misconfiguration uses ConfigEntryNotReady, reconfigure flow, and options reload.
+  repair-issues: exempt
   stale-devices: exempt            # No devices created
 
   # Gold
