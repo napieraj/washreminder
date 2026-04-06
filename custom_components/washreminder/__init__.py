@@ -8,6 +8,8 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .coordinator import WashReminderCoordinator
 
+PLATFORMS: list[str] = ["binary_sensor", "sensor"]
+
 # Python 3.12 type alias (PEP 695). HA 2025.1+ mandates Python 3.12.
 # Propagates type safety into platform setup functions with zero runtime cost.
 type WashReminderConfigEntry = ConfigEntry[WashReminderCoordinator]
@@ -33,6 +35,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: WashReminderConfigEntry)
     # callable; wrapping in async_on_unload ensures it's cleaned up on unload.
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
 
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     return True
 
 
@@ -49,4 +53,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: WashReminderConfigEntry
     - runtime_data: auto-cleared by HA on return of True
     - Options listener: entry.async_on_unload registered above
     """
-    return True
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

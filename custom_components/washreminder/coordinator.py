@@ -150,9 +150,27 @@ class WashReminderCoordinator:
         # Loaded once during async_setup; cached for notification messages.
         self._translations: dict[str, str] = {}
 
+        self._listeners: list[Callable[[], None]] = []
+
     # ------------------------------------------------------------------
     # Public properties — used by diagnostics.py and externally
     # ------------------------------------------------------------------
+
+    @property
+    def entry(self) -> ConfigEntry:
+        """Config entry owning this coordinator."""
+        return self._entry
+
+    @property
+    def activity_state(self) -> str:
+        """Short state label for the diagnostic activity sensor."""
+        if self.notification_task_running:
+            return "reminding"
+        if self.delivery_task_running:
+            return "awaiting_delivery"
+        if self._pending:
+            return "pending_arrival"
+        return "idle"
 
     @property
     def trigger_entity(self) -> str:
@@ -204,6 +222,25 @@ class WashReminderCoordinator:
             self._delivery_task is not None
             and not self._delivery_task.done()
         )
+
+    @callback
+    def async_add_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
+        """Register a callback invoked when entity-visible coordinator state changes."""
+        self._listeners.append(update_callback)
+
+        def remove() -> None:
+            try:
+                self._listeners.remove(update_callback)
+            except ValueError:
+                pass
+
+        return remove
+
+    @callback
+    def async_update_listeners(self) -> None:
+        """Notify all platform entities to refresh their state."""
+        for listener in list(self._listeners):
+            listener()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -281,6 +318,8 @@ class WashReminderCoordinator:
             else:
                 self._subscribe_person()
 
+        self.async_update_listeners()
+
     # ------------------------------------------------------------------
     # Dynamic person listener management
     # ------------------------------------------------------------------
@@ -293,6 +332,7 @@ class WashReminderCoordinator:
             self._hass, self._person, self._on_person_state_change
         )
         _LOGGER.debug("Listening for %s to arrive home", self._person)
+        self.async_update_listeners()
 
     def _unsubscribe_person(self) -> None:
         """Unsubscribe from person state changes. Idempotent."""
@@ -300,6 +340,7 @@ class WashReminderCoordinator:
             self._unsub_person()
             self._unsub_person = None
             _LOGGER.debug("Stopped listening for %s", self._person)
+            self.async_update_listeners()
 
     # ------------------------------------------------------------------
     # Translation helpers
@@ -393,6 +434,8 @@ class WashReminderCoordinator:
                 name="washreminder_set_pending",
             )
 
+        self.async_update_listeners()
+
     @callback
     def _on_person_state_change(self, event: Event) -> None:
         """Handle person entity state changes — only active while _pending=True."""
@@ -415,6 +458,8 @@ class WashReminderCoordinator:
             self._deliver_on_arrival(),
             name="washreminder_arrival_delivery",
         )
+
+        self.async_update_listeners()
 
     @callback
     def _on_door_state_change(self, event: Event) -> None:
@@ -460,6 +505,7 @@ class WashReminderCoordinator:
 
         if actions_taken:
             _LOGGER.info("Door opened — %s", ", ".join(actions_taken))
+            self.async_update_listeners()
 
     # ------------------------------------------------------------------
     # Loop management
@@ -480,6 +526,7 @@ class WashReminderCoordinator:
             self._notification_loop(),
             name="washreminder_notification_loop",
         )
+        self.async_update_listeners()
 
     def _cancel_delivery_task(self) -> None:
         """Cancel an in-flight delivery task if one exists."""
@@ -487,10 +534,12 @@ class WashReminderCoordinator:
             _LOGGER.debug("Cancelling pending arrival delivery")
             self._delivery_task.cancel()
             self._delivery_task = None
+            self.async_update_listeners()
 
     async def _deliver_on_arrival(self) -> None:
         """Persist cleared pending flag, wait for WiFi handshake, then start loop."""
         await self._persist_pending(False)
+        self.async_update_listeners()
         _LOGGER.debug(
             "Waiting %ds for WiFi reconnect before sending reminder",
             self._arrival_delay_seconds,
@@ -503,6 +552,7 @@ class WashReminderCoordinator:
     # ------------------------------------------------------------------
 
     async def _notification_loop(self) -> None:
+        self.async_update_listeners()
         try:
             for i in range(self._max_repeats):
                 message = (
@@ -529,7 +579,10 @@ class WashReminderCoordinator:
                         "Could not send notification via notify.%s — stopping reminders",
                         self._notify_service,
                     )
+                    self.async_update_listeners()
                     return
+
+                self.async_update_listeners()
 
                 result = await self._wait_for_action(
                     {ACTION_SNOOZE, ACTION_DONE},
@@ -539,6 +592,7 @@ class WashReminderCoordinator:
                 if result == ACTION_DONE:
                     await self._clear_notification()
                     _LOGGER.info("Reminder acknowledged")
+                    self.async_update_listeners()
                     return
 
                 if result == ACTION_SNOOZE:
@@ -559,6 +613,8 @@ class WashReminderCoordinator:
         except asyncio.CancelledError:
             _LOGGER.debug("Reminder loop cancelled")
             raise  # Must re-raise; asyncio task machinery depends on this
+        finally:
+            self.async_update_listeners()
 
     # ------------------------------------------------------------------
     # Helpers

@@ -13,9 +13,9 @@ rules:
   docs-high-level-description: done
   docs-installation-instructions: done
   entity-event-setup: done         # Listeners registered in async_setup, torn down via async_on_unload
-  entity-unique-id: exempt         # Integration creates no entities
-  has-entity-name: exempt          # No entities
-  icon: exempt                     # No entities; integration_type=service
+  entity-unique-id: done
+  has-entity-name: done
+  icon: done                       # icons.json + entity descriptions
   log-when-unavailable: done       # ConfigEntryNotReady raised when entities missing
   reconfiguration-flow: done       # async_step_reconfigure implemented
   test-before-setup: done          # Entity existence validated in coordinator.async_setup
@@ -25,24 +25,22 @@ rules:
   docs-actions: exempt             # No custom actions
   docs-configuration-parameters: done
   docs-installation-parameters: done
-  entity-unavailable: exempt       # No entities
+  entity-unavailable: done
   exception-translations: done     # ConfigEntryNotReady with translation_domain/key/placeholders
-  icon-translations: exempt        # No entities
-  parallel-updates: exempt         # No polling, no platforms
+  icon-translations: done          # icons.json
+  parallel-updates: exempt         # No polling; entity writes are coordinator-driven
   reauthentication-flow: exempt    # No authentication required
-  # No DeviceEntry / device registry; no recoverable faults that fit Repairs UI.
-  # Misconfiguration uses ConfigEntryNotReady, reconfigure flow, and options reload.
   repair-issues: exempt
-  stale-devices: exempt            # No devices created
+  stale-devices: done              # Single service device per config entry
 
   # Gold
   diagnostics: done                # diagnostics.py with async_get_config_entry_diagnostics
   discovery-update-info: exempt    # Not a discovered integration
   docs-automatic-discovery: exempt
   docs-examples: todo
-  entity-category: exempt          # No entities
+  entity-category: done            # Diagnostic category on sensors
   entity-disabled-by-default: exempt
-  entity-translations: exempt      # No entities
+  entity-translations: done
   inject-websession: exempt        # No HTTP requests
   integration-owner: done
 

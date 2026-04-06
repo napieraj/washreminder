@@ -6,6 +6,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
@@ -28,62 +29,72 @@ from .const import (
 )
 
 
-def _entity_schema(defaults: dict) -> vol.Schema:
-    """Build the entity configuration schema.
+def _pick_trigger_schema(defaults: dict) -> vol.Schema:
+    """Schema for the cycle-completion entity step."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_TRIGGER_ENTITY,
+                default=defaults.get(CONF_TRIGGER_ENTITY, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
+            ),
+        }
+    )
 
-    Both binary_sensor and sensor domains are accepted for the trigger entity.
-    Leave trigger_state blank to use binary-sensor on→off logic; enter a value
-    like "Idle" to use state-sensor completion-value logic.
-    """
-    schema: dict = {
-        vol.Required(
-            CONF_TRIGGER_ENTITY,
-            default=defaults.get(CONF_TRIGGER_ENTITY, ""),
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
-        ),
-        vol.Optional(
-            CONF_TRIGGER_STATE,
-            default=defaults.get(CONF_TRIGGER_STATE, DEFAULT_BINARY_SENSOR_TRIGGER_STATE),
-        ): selector.TextSelector(),
-        vol.Required(
-            CONF_PERSON,
-            default=defaults.get(CONF_PERSON, ""),
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="person")
-        ),
-        vol.Required(
-            CONF_NOTIFY_TARGET,
-            default=defaults.get(CONF_NOTIFY_TARGET, ""),
-        ): selector.TextSelector(),
-    }
 
-    # Door sensor: vol.Optional without default so HA omits the key entirely
-    # when nothing is selected. The coordinator treats absent/empty as
-    # "not configured". When reconfiguring with an existing sensor, the
-    # current value is passed via suggested_value so the picker pre-fills.
+def _trigger_state_schema(defaults: dict) -> vol.Schema:
+    """Schema for state-sensor completion value."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_TRIGGER_STATE,
+                default=defaults.get(
+                    CONF_TRIGGER_STATE, DEFAULT_BINARY_SENSOR_TRIGGER_STATE
+                ),
+            ): selector.TextSelector(),
+        }
+    )
+
+
+def _presence_notify_door_schema(defaults: dict) -> vol.Schema:
+    """Person, notify entity, optional door sensor."""
     door_default = defaults.get(CONF_DOOR_SENSOR)
     if door_default:
-        schema[vol.Optional(
+        door_key = vol.Optional(
             CONF_DOOR_SENSOR,
             description={"suggested_value": door_default},
-        )] = selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="binary_sensor")
         )
     else:
-        schema[vol.Optional(CONF_DOOR_SENSOR)] = selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="binary_sensor")
-        )
+        door_key = vol.Optional(CONF_DOOR_SENSOR)
 
-    # Inverted toggle: only meaningful when a door sensor is configured,
-    # but HA config flows don't support conditional fields. The description
-    # makes it clear this only applies to the door sensor.
-    schema[vol.Optional(
-        CONF_DOOR_SENSOR_INVERTED,
-        default=defaults.get(CONF_DOOR_SENSOR_INVERTED, False),
-    )] = selector.BooleanSelector()
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_PERSON,
+                default=defaults.get(CONF_PERSON, ""),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="person")),
+            vol.Required(
+                CONF_NOTIFY_TARGET,
+                default=defaults.get(CONF_NOTIFY_TARGET, ""),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="notify")),
+            door_key: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+        }
+    )
 
-    return vol.Schema(schema)
+
+def _door_options_schema(defaults: dict) -> vol.Schema:
+    """Invert toggle — only shown when a door sensor is configured."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_DOOR_SENSOR_INVERTED,
+                default=defaults.get(CONF_DOOR_SENSOR_INVERTED, False),
+            ): selector.BooleanSelector(),
+        }
+    )
 
 
 def _validate_trigger_state_for_sensor(user_input: dict) -> dict[str, str]:
@@ -111,7 +122,11 @@ def _timing_schema(defaults: dict) -> vol.Schema:
             ),
             vol.Optional(
                 CONF_REPEAT_INTERVAL_MINUTES,
-                default=int(defaults.get(CONF_REPEAT_INTERVAL_MINUTES, DEFAULT_REPEAT_INTERVAL_MINUTES)),
+                default=int(
+                    defaults.get(
+                        CONF_REPEAT_INTERVAL_MINUTES, DEFAULT_REPEAT_INTERVAL_MINUTES
+                    )
+                ),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=5, max=120, step=5, mode="box")
             ),
@@ -123,7 +138,11 @@ def _timing_schema(defaults: dict) -> vol.Schema:
             ),
             vol.Optional(
                 CONF_ARRIVAL_DELAY_SECONDS,
-                default=int(defaults.get(CONF_ARRIVAL_DELAY_SECONDS, DEFAULT_ARRIVAL_DELAY_SECONDS)),
+                default=int(
+                    defaults.get(
+                        CONF_ARRIVAL_DELAY_SECONDS, DEFAULT_ARRIVAL_DELAY_SECONDS
+                    )
+                ),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0, max=120, step=5, mode="box")
             ),
@@ -131,40 +150,54 @@ def _timing_schema(defaults: dict) -> vol.Schema:
     )
 
 
-def _normalise_notify_target(user_input: dict) -> dict:
-    """Ensure notify_target has exactly one notify. prefix."""
-    target = user_input.get(CONF_NOTIFY_TARGET, "").strip()
-    # Strip all leading "notify." prefixes to handle double-prefix typos.
-    while target.startswith("notify."):
-        target = target[len("notify."):]
-    if target:
-        user_input[CONF_NOTIFY_TARGET] = f"notify.{target}"
-    return user_input
+def _notify_service_name(entity_id: str) -> str:
+    """Map notify entity_id to notify domain service name."""
+    if not entity_id.startswith("notify."):
+        return ""
+    return entity_id.removeprefix("notify.")
 
 
-def _validate_notify_service(
+def _validate_notify_target(
     hass: HomeAssistant, user_input: dict
 ) -> dict[str, str]:
-    """Check the notify service exists. Returns errors dict."""
+    """Ensure the notify entity exists and the legacy notify service is callable."""
     errors: dict[str, str] = {}
-    notify_target = user_input.get(CONF_NOTIFY_TARGET, "")
-    if notify_target:
-        service_name = (
-            notify_target[len("notify."):]
-            if notify_target.startswith("notify.")
-            else notify_target
-        )
-        if not hass.services.has_service("notify", service_name):
-            errors[CONF_NOTIFY_TARGET] = "notify_service_not_found"
+    entity_id = (user_input.get(CONF_NOTIFY_TARGET) or "").strip()
+    if not entity_id:
+        errors[CONF_NOTIFY_TARGET] = "notify_entity_required"
+        return errors
+    if not entity_id.startswith("notify."):
+        errors[CONF_NOTIFY_TARGET] = "notify_entity_invalid"
+        return errors
+
+    state = hass.states.get(entity_id)
+    registry = er.async_get(hass)
+    ent = registry.async_get(entity_id)
+    if state is None and ent is None:
+        errors[CONF_NOTIFY_TARGET] = "notify_entity_not_found"
+        return errors
+
+    service = _notify_service_name(entity_id)
+    if not service or not hass.services.has_service("notify", service):
+        errors[CONF_NOTIFY_TARGET] = "notify_service_not_found"
     return errors
+
+
+def _normalise_door_fields(data: dict) -> dict:
+    """Drop empty door sensor and clear invert when no door."""
+    result = dict(data)
+    door = result.get(CONF_DOOR_SENSOR)
+    if not door or (isinstance(door, str) and not door.strip()):
+        result.pop(CONF_DOOR_SENSOR, None)
+        result[CONF_DOOR_SENSOR_INVERTED] = False
+    return result
 
 
 class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Wash Reminder.
 
-    Entity configuration (trigger, person, notify target, door sensor) is
-    handled here and in the reconfiguration flow. Timing parameters are in
-    the options flow — no reinstall needed to adjust them.
+    Entity configuration uses multiple steps so optional fields only appear when
+    relevant. Timing parameters are in the options flow.
     """
 
     VERSION = 1
@@ -172,31 +205,108 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialise flow state."""
         self._entity_data: dict = {}
+        self._reconfigure_mode: bool = False
 
     async def async_step_user(self, user_input=None):
-        """Step 1 of 2: entity configuration."""
+        """Start setup: pick cycle-completion entity."""
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
+        self._reconfigure_mode = False
+        if not self._entity_data:
+            self._entity_data = {}
+
+        return await self.async_step_pick_trigger(user_input)
+
+    async def async_step_pick_trigger(self, user_input=None):
+        """Select binary_sensor or sensor for cycle completion."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            user_input = _normalise_notify_target(user_input)
-            errors = _validate_notify_service(self.hass, user_input)
-            errors |= _validate_trigger_state_for_sensor(user_input)
-
-            if not errors:
-                self._entity_data = user_input
-                return await self.async_step_timing()
+            entity_id = user_input[CONF_TRIGGER_ENTITY]
+            self._entity_data[CONF_TRIGGER_ENTITY] = entity_id
+            if entity_id.startswith("binary_sensor."):
+                self._entity_data[CONF_TRIGGER_STATE] = ""
+                return await self.async_step_presence_notify_door(None)
+            return await self.async_step_trigger_state(None)
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=_entity_schema(user_input or {}),
+            step_id="pick_trigger",
+            data_schema=_pick_trigger_schema(self._entity_data),
             errors=errors,
         )
 
+    async def async_step_trigger_state(self, user_input=None):
+        """Completion state for sensor.* triggers only."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            merged = {**self._entity_data, **user_input}
+            errors = _validate_trigger_state_for_sensor(merged)
+            if not errors:
+                self._entity_data[CONF_TRIGGER_STATE] = user_input[
+                    CONF_TRIGGER_STATE
+                ].strip()
+                return await self.async_step_presence_notify_door(None)
+
+        return self.async_show_form(
+            step_id="trigger_state",
+            data_schema=_trigger_state_schema(self._entity_data),
+            errors=errors,
+        )
+
+    async def async_step_presence_notify_door(self, user_input=None):
+        """Person, notify entity, optional door sensor."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = _validate_notify_target(self.hass, user_input)
+            if not errors:
+                self._entity_data.update(user_input)
+                door = self._entity_data.get(CONF_DOOR_SENSOR)
+                has_door = bool(door and str(door).strip())
+                if not has_door:
+                    self._entity_data.pop(CONF_DOOR_SENSOR, None)
+                    self._entity_data[CONF_DOOR_SENSOR_INVERTED] = False
+                    return await self._async_finish_entities_step()
+                return await self.async_step_door_options(None)
+
+        merged_defaults = {**self._entity_data, **(user_input or {})}
+        return self.async_show_form(
+            step_id="presence_notify_door",
+            data_schema=_presence_notify_door_schema(merged_defaults),
+            errors=errors,
+        )
+
+    async def async_step_door_options(self, user_input=None):
+        """Door sensor polarity — only after a door entity was chosen."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._entity_data[CONF_DOOR_SENSOR_INVERTED] = user_input.get(
+                CONF_DOOR_SENSOR_INVERTED, False
+            )
+            return await self._async_finish_entities_step()
+
+        return self.async_show_form(
+            step_id="door_options",
+            data_schema=_door_options_schema(self._entity_data),
+            errors=errors,
+        )
+
+    async def _async_finish_entities_step(self):
+        """Reconfigure ends here; new config continues to timing."""
+        data = _normalise_door_fields(self._entity_data)
+        if self._reconfigure_mode:
+            return self.async_update_reload_and_abort(
+                self._get_reconfigure_entry(),
+                data_updates=data,
+            )
+        self._entity_data = data
+        return await self.async_step_timing(None)
+
     async def async_step_timing(self, user_input=None):
-        """Step 2 of 2: timing configuration."""
+        """Final setup step: timing parameters."""
         if user_input is not None:
             return self.async_create_entry(
                 title="Wash Reminder",
@@ -209,30 +319,12 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reconfigure(self, user_input=None):
-        """Reconfigure entity settings without removing the integration.
+        """Reconfigure entity settings (same steps as setup, without timing)."""
+        if not self._reconfigure_mode:
+            self._reconfigure_mode = True
+            self._entity_data = dict(self._get_reconfigure_entry().data)
 
-        Timing parameters are in the options flow — only entity fields here.
-        Silver quality-scale requirement: reconfiguration-flow.
-        """
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            user_input = _normalise_notify_target(user_input)
-            errors = _validate_notify_service(self.hass, user_input)
-            errors |= _validate_trigger_state_for_sensor(user_input)
-
-            if not errors:
-                return self.async_update_reload_and_abort(
-                    self._get_reconfigure_entry(),
-                    data_updates=user_input,
-                )
-
-        current = dict(self._get_reconfigure_entry().data)
-        return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=_entity_schema(current),
-            errors=errors,
-        )
+        return await self.async_step_pick_trigger(user_input)
 
     @staticmethod
     @callback
@@ -241,12 +333,7 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class WashReminderOptionsFlow(config_entries.OptionsFlow):
-    """Options flow for adjusting timing parameters post-setup.
-
-    Changes trigger a coordinator reload via _async_reload_on_update (registered
-    in async_setup_entry). The coordinator merges {**entry.data, **entry.options}
-    so options values override without touching the immutable config data.
-    """
+    """Options flow for adjusting timing parameters post-setup."""
 
     async def async_step_init(self, user_input=None):
         current = {**self.config_entry.data, **self.config_entry.options}

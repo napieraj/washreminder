@@ -1,0 +1,29 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "pending_notification": {
+        "default": "mdi:bell-ring-outline"
+      }
+    },
+    "sensor": {
+      "activity": {
+        "default": "mdi:state-machine",
+        "state": {
+          "idle": "mdi:circle-outline",
+          "reminding": "mdi:bell-ring-outline",
+          "awaiting_delivery": "mdi:timer-sand",
+          "pending_arrival": "mdi:account-clock-outline"
+        }
+      },
+      "runtime": {
+        "default": "mdi:timeline-clock-outline",
+        "state": {
+          "idle": "mdi:sleep",
+          "reminder_loop": "mdi:bell-ring-outline",
+          "arrival_delivery": "mdi:home-import-outline",
+          "awaiting_arrival": "mdi:account-arrow-left-outline"
+        }
+      }
+    }
+  }
+}
