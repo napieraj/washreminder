@@ -1,14 +1,14 @@
 {
   "domain": "washreminder",
   "name": "Wash Reminder",
-  "codeowners": ["@napieraj"],
-  "config_flow": true,
-  "dependencies": [],
+  "version": "1.2.0b1",
   "documentation": "https://github.com/napieraj/washreminder",
-  "integration_type": "service",
-  "iot_class": "local_push",
   "issue_tracker": "https://github.com/napieraj/washreminder/issues",
-  "quality_scale": "silver",
+  "codeowners": ["@napieraj"],
+  "dependencies": [],
   "requirements": [],
-  "version": "1.2.0b1"
+  "iot_class": "local_push",
+  "integration_type": "service",
+  "quality_scale": "silver",
+  "config_flow": true
 }
