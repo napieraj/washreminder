@@ -153,13 +153,15 @@ class WashReminderCoordinator:
             config.get(CONF_CRITICAL_NOTIFICATION, DEFAULT_CRITICAL_NOTIFICATION)
         )
 
-        # serialize_in_event_loop=True: explicit, matches the 2025.11+ default.
-        self._store: Store = Store(
-            hass,
-            STORAGE_VERSION,
-            STORAGE_KEY,
-            serialize_in_event_loop=True,
-        )
+        # serialize_in_event_loop=True avoids blocking I/O on the event loop.
+        # The kwarg was added in HA 2025.11; omit it on older cores so CI
+        # (which pins an earlier HA) doesn't break.
+        try:
+            self._store: Store = Store(
+                hass, STORAGE_VERSION, STORAGE_KEY, serialize_in_event_loop=True,
+            )
+        except TypeError:
+            self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
         # In-memory pending flag. Set synchronously in @callback handlers to
         # prevent race conditions on rapid consecutive state-change events.
