@@ -583,3 +583,137 @@ async def test_startup_pending_and_home_delivers(
     # Should have cleared pending and started delivery
     assert coordinator.pending is False
     assert coordinator.delivery_task_running or coordinator.notification_task_running
+
+
+# ---------------------------------------------------------------------------
+# Door open clears notification after loop exhausted
+# ---------------------------------------------------------------------------
+
+
+async def test_door_open_clears_notification_after_loop_exhausted(
+    hass: HomeAssistant,
+) -> None:
+    """Opening the door after the loop exhausted all repeats should still clear."""
+    hass.states.async_set("binary_sensor.wm", "on")
+    hass.states.async_set("person.someone", "home")
+    hass.states.async_set("binary_sensor.door", "off")
+    _register_notify(hass)
+
+    data = _base_config(door_sensor="binary_sensor.door")
+    entry = _mock_entry(hass, data)
+    coordinator = await _setup_coordinator(hass, entry)
+
+    # Let the loop exhaust all repeats by making _wait_for_action always timeout
+    with patch.object(
+        coordinator, "_wait_for_action", new_callable=AsyncMock, return_value=None
+    ):
+        hass.states.async_set("binary_sensor.wm", "off")
+        await hass.async_block_till_done()
+        # Give the loop time to run through all iterations
+        await asyncio.sleep(0.3)
+        await hass.async_block_till_done()
+
+    assert coordinator.notification_task_running is False
+
+    # Spy on _clear_notification to verify door open triggers it
+    with patch.object(
+        coordinator, "_clear_notification", new_callable=AsyncMock
+    ) as mock_clear:
+        hass.states.async_set("binary_sensor.door", "on")
+        await hass.async_block_till_done()
+        await asyncio.sleep(0.1)
+        await hass.async_block_till_done()
+
+        mock_clear.assert_called_once()
+
+
+async def test_notification_cleared_on_loop_exhaustion(
+    hass: HomeAssistant,
+) -> None:
+    """Notification should be cleared when the loop exhausts all repeats."""
+    hass.states.async_set("binary_sensor.wm", "on")
+    hass.states.async_set("person.someone", "home")
+    _register_notify(hass)
+
+    data = _base_config()
+    entry = _mock_entry(hass, data)
+    coordinator = await _setup_coordinator(hass, entry)
+
+    clear_called = asyncio.Event()
+    original_clear = coordinator._clear_notification
+
+    async def _tracked_clear() -> None:
+        await original_clear()
+        clear_called.set()
+
+    with patch.object(
+        coordinator, "_wait_for_action", new_callable=AsyncMock, return_value=None
+    ), patch.object(coordinator, "_clear_notification", side_effect=_tracked_clear):
+        hass.states.async_set("binary_sensor.wm", "off")
+        await hass.async_block_till_done()
+
+        # Wait for the loop to finish and clear to be called
+        await asyncio.wait_for(clear_called.wait(), timeout=5.0)
+
+    assert coordinator.notification_task_running is False
+
+
+# ---------------------------------------------------------------------------
+# Person departure pauses reminders
+# ---------------------------------------------------------------------------
+
+
+async def test_person_leaves_pauses_reminder_loop(
+    hass: HomeAssistant,
+) -> None:
+    """Person leaving home while reminding should pause the loop."""
+    hass.states.async_set("binary_sensor.wm", "on")
+    hass.states.async_set("person.someone", "home")
+    _register_notify(hass)
+
+    data = _base_config()
+    entry = _mock_entry(hass, data)
+    coordinator = await _setup_coordinator(hass, entry)
+
+    # Trigger cycle — loop starts
+    hass.states.async_set("binary_sensor.wm", "off")
+    await hass.async_block_till_done()
+    assert coordinator.notification_task_running is True
+
+    # Person leaves home
+    hass.states.async_set("person.someone", "not_home")
+    await hass.async_block_till_done()
+
+    assert coordinator.notification_task_running is False
+    assert coordinator.pending is True
+    assert coordinator.activity_state == "pending_arrival"
+
+
+async def test_person_returns_resumes_after_pause(
+    hass: HomeAssistant,
+) -> None:
+    """Person returning after departure-pause should resume reminders."""
+    hass.states.async_set("binary_sensor.wm", "on")
+    hass.states.async_set("person.someone", "home")
+    _register_notify(hass)
+
+    data = _base_config()
+    entry = _mock_entry(hass, data)
+    coordinator = await _setup_coordinator(hass, entry)
+
+    # Trigger cycle — loop starts
+    hass.states.async_set("binary_sensor.wm", "off")
+    await hass.async_block_till_done()
+    assert coordinator.notification_task_running is True
+
+    # Person leaves home — loop pauses
+    hass.states.async_set("person.someone", "not_home")
+    await hass.async_block_till_done()
+    assert coordinator.pending is True
+
+    # Person returns home — should resume
+    hass.states.async_set("person.someone", "home")
+    await hass.async_block_till_done()
+
+    assert coordinator.pending is False
+    assert coordinator.delivery_task_running or coordinator.notification_task_running

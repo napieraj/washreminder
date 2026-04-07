@@ -85,12 +85,11 @@ class WashReminderCoordinator:
         can be inverted to "off" via the config flow for sensors with
         non-standard polarity. Always-active listener.
 
-    IO minimisation
+    Person tracking
     ---------------
-    When no wash cycle is in progress, only the trigger entity listener and
-    (if configured) the door sensor listener are active. The person entity
-    listener is subscribed dynamically — only when _pending=True — and torn
-    down immediately on arrival or delivery.
+    The person entity listener is always active. When the person leaves
+    home during an active reminder loop, the loop is paused and a pending
+    flag is set. When the person returns, the pending reminder is delivered.
     """
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -167,9 +166,6 @@ class WashReminderCoordinator:
         # prevent race conditions on rapid consecutive state-change events.
         self._pending: bool = False
 
-        # Dynamic person listener — only active while _pending=True.
-        self._unsub_person: Callable[[], None] | None = None
-
         # Task tracking for restart-semantics cancellation.
         self._notification_task: asyncio.Task | None = None
         self._delivery_task: asyncio.Task | None = None
@@ -244,8 +240,8 @@ class WashReminderCoordinator:
 
     @property
     def person_listener_active(self) -> bool:
-        """Return whether the person entity listener is currently subscribed."""
-        return self._unsub_person is not None
+        """Return whether the coordinator is waiting for the person to arrive."""
+        return self._pending
 
     @property
     def notification_task_running(self) -> bool:
@@ -349,8 +345,13 @@ class WashReminderCoordinator:
                 )
             )
 
-        # Person listener cleanup guard — covers HA unload while pending + away.
-        self._entry.async_on_unload(self._unsubscribe_person)
+        # Person listener: always active — handles arrival (pending → deliver)
+        # and departure (reminding → pause).
+        self._entry.async_on_unload(
+            async_track_state_change_event(
+                self._hass, self._person, self._on_person_state_change
+            )
+        )
 
         # Restore state after HA restart.
         if self._pending:
@@ -363,32 +364,8 @@ class WashReminderCoordinator:
                     self._deliver_on_arrival(),
                     name="washreminder_startup_delivery",
                 )
-            else:
-                self._subscribe_person()
 
         self.async_update_listeners()
-
-    # ------------------------------------------------------------------
-    # Dynamic person listener management
-    # ------------------------------------------------------------------
-
-    def _subscribe_person(self) -> None:
-        """Subscribe to person state changes. No-op if already subscribed."""
-        if self._unsub_person is not None:
-            return
-        self._unsub_person = async_track_state_change_event(
-            self._hass, self._person, self._on_person_state_change
-        )
-        _LOGGER.debug("Listening for %s to arrive home", self._person)
-        self.async_update_listeners()
-
-    def _unsubscribe_person(self) -> None:
-        """Unsubscribe from person state changes. Idempotent."""
-        if self._unsub_person is not None:
-            self._unsub_person()
-            self._unsub_person = None
-            _LOGGER.debug("Stopped listening for %s", self._person)
-            self.async_update_listeners()
 
     # ------------------------------------------------------------------
     # Translation helpers
@@ -445,7 +422,6 @@ class WashReminderCoordinator:
         else:
             _LOGGER.debug("Person is away — saving pending state, will notify on arrival")
             self._pending = True
-            self._subscribe_person()
             self._entry.async_create_background_task(
                 self._hass,
                 self._persist_pending(True),
@@ -508,28 +484,52 @@ class WashReminderCoordinator:
 
     @callback
     def _on_person_state_change(self, event: Event) -> None:
-        """Handle person entity state changes — only active while _pending=True."""
+        """Handle person entity state changes.
+
+        Two directions:
+        - Arrived home while pending → deliver notification.
+        - Left home while reminding → pause loop, set pending.
+        """
         old = event.data.get("old_state")
         new = event.data.get("new_state")
-
-        if not (old and old.state != STATE_HOME and new and new.state == STATE_HOME):
+        if not old or not new:
             return
 
-        if not self._pending:
-            self._unsubscribe_person()
+        # Person arrived home — deliver pending notification.
+        if old.state != STATE_HOME and new.state == STATE_HOME:
+            if not self._pending:
+                return
+            self._pending = False
+            _LOGGER.debug("Person arrived home — sending pending reminder")
+            self._delivery_task = self._entry.async_create_background_task(
+                self._hass,
+                self._deliver_on_arrival(),
+                name="washreminder_arrival_delivery",
+            )
+            self.async_update_listeners()
             return
 
-        self._pending = False
-        self._unsubscribe_person()
-
-        _LOGGER.debug("Person arrived home — sending pending reminder")
-        self._delivery_task = self._entry.async_create_background_task(
-            self._hass,
-            self._deliver_on_arrival(),
-            name="washreminder_arrival_delivery",
-        )
-
-        self.async_update_listeners()
+        # Person left home — pause active reminder loop.
+        if old.state == STATE_HOME and new.state != STATE_HOME:
+            if not self._notification_task or self._notification_task.done():
+                return
+            self._notification_task.cancel()
+            self._notification_task = None
+            self._entry.async_create_background_task(
+                self._hass,
+                self._clear_notification(),
+                name="washreminder_departure_clear",
+            )
+            self._pending = True
+            self._entry.async_create_background_task(
+                self._hass,
+                self._persist_pending(True),
+                name="washreminder_departure_pending",
+            )
+            _LOGGER.info(
+                "Person left home — paused reminders, will resume on return"
+            )
+            self.async_update_listeners()
 
     @callback
     def _on_door_state_change(self, event: Event) -> None:
@@ -545,16 +545,19 @@ class WashReminderCoordinator:
 
         actions_taken: list[str] = []
 
-        # Cancel active notification loop.
-        if self._notification_task and not self._notification_task.done():
-            self._notification_task.cancel()
+        # Cancel active notification loop and dismiss the notification from
+        # the device.  The loop may have already finished but the notification
+        # can still be visible on the phone.
+        if self._notification_task is not None:
+            if not self._notification_task.done():
+                self._notification_task.cancel()
             self._notification_task = None
             self._entry.async_create_background_task(
                 self._hass,
                 self._clear_notification(),
                 name="washreminder_door_clear_notification",
             )
-            actions_taken.append("stopped reminder loop")
+            actions_taken.append("dismissed notification")
 
         # Cancel in-flight delivery task (WiFi delay in progress).
         if self._delivery_task and not self._delivery_task.done():
@@ -565,7 +568,6 @@ class WashReminderCoordinator:
         # Clear pending flag if set (person was away, door opened somehow).
         if self._pending:
             self._pending = False
-            self._unsubscribe_person()
             self._entry.async_create_background_task(
                 self._hass,
                 self._persist_pending(False),
@@ -689,6 +691,7 @@ class WashReminderCoordinator:
                         self._max_repeats,
                     )
 
+            await self._clear_notification()
             _LOGGER.info("Reached %d reminders — stopping", self._max_repeats)
 
         except asyncio.CancelledError:

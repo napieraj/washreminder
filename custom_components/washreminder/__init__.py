@@ -46,9 +46,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: WashReminderConfigEntry
     All cleanup is managed by the ConfigEntry lifecycle:
     - Trigger entity listener: registered via entry.async_on_unload() in coordinator
     - Door sensor listener: registered via entry.async_on_unload() in coordinator
-    - Person entity listener: torn down in coordinator._unsubscribe_person() which
-      is called when pending clears — entry unload also covers any edge-case
-      where it's still subscribed (entry._on_unload callbacks run on unload)
+    - Person entity listener: registered via entry.async_on_unload() in coordinator
     - Background tasks: auto-cancelled via entry._background_tasks
     - runtime_data: auto-cleared by HA on return of True
     - Options listener: entry.async_on_unload registered above
