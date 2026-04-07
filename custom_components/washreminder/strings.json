@@ -51,7 +51,7 @@
         },
         "data_description": {
           "person_entity_id": "Notifications are held until this person arrives home.",
-          "notify_target": "All registered notify services are listed, including mobile app targets.",
+          "notify_target": "Only notify.* entities are listed — typically from the Home Assistant Companion App.",
           "door_sensor_entity_id": "Optional. A contact sensor on the machine door. Opening the door cancels pending reminders and the active reminder loop."
         }
       },
@@ -85,8 +85,9 @@
       }
     },
     "error": {
-      "notify_entity_invalid": "Select a notify.* service from the list.",
-      "notify_entity_required": "Choose a notify service.",
+      "notify_entity_invalid": "Select a notify.* entity from the list.",
+      "notify_entity_not_found": "That notify entity is not available. Reload the integration that provides it, or pick another notify entity.",
+      "notify_entity_required": "Choose a notify entity.",
       "notify_service_not_found": "The notify service for this entity is missing. Check that the Companion App is set up and the entity is loaded.",
       "trigger_state_required": "Enter the exact completion state for this sensor (e.g. Idle). Case-sensitive — check Developer Tools → States."
     },

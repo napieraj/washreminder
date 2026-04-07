@@ -55,6 +55,7 @@ TRIGGER_MODE_STATE_SENSOR = "state_sensor"
 TRIGGER_MODE_WASHDATA_EVENT = "washdata_event"
 
 EVENT_WASHDATA_CYCLE_ENDED = "ha_washdata_cycle_ended"
+EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
 WASHDATA_DOMAIN = "ha_washdata"
 
 # ---------------------------------------------------------------------------

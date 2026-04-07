@@ -67,10 +67,4 @@ class WashReminderRuntimeSensor(WashReminderEntity, SensorEntity):
 
     @property
     def native_value(self) -> str:
-        if self.coordinator.notification_task_running:
-            return "reminder_loop"
-        if self.coordinator.delivery_task_running:
-            return "arrival_delivery"
-        if self.coordinator.person_listener_active:
-            return "awaiting_arrival"
-        return "idle"
+        return self.coordinator.runtime_state
