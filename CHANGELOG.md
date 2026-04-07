@@ -10,7 +10,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Translation sync** — `strings.json` was missing the `notify_entity_not_found` error key and had drifted from `translations/en.json` in several data descriptions and error messages. HA would show raw translation keys instead of user-friendly text in affected config flow paths.
+- **Translation sync** — `strings.json` had drifted from `translations/en.json` in several data descriptions and error messages. Removed orphaned `notify_entity_not_found` error key (unused in code, flagged by hassfest). HA would show raw translation keys instead of user-friendly text in affected config flow paths.
 - **Store compatibility** — `Store(serialize_in_event_loop=True)` raised `TypeError` on HA versions before 2025.11 (including the test harness). Coordinator now falls back gracefully when the kwarg is unsupported.
 
 ### Changed
