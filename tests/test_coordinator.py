@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from custom_components.washreminder.const import (
     ACTION_DONE,
@@ -65,9 +67,10 @@ def _base_config(
 
 
 def _mock_entry(hass: HomeAssistant, data: dict) -> MockConfigEntry:
-    """Create and add a MockConfigEntry."""
+    """Create a MockConfigEntry in LOADED state so lifecycle methods work."""
     entry = MockConfigEntry(domain=DOMAIN, data=data)
     entry.add_to_hass(hass)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
     return entry
 
 
@@ -79,9 +82,13 @@ def _register_notify(hass: HomeAssistant) -> None:
 async def _setup_coordinator(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> WashReminderCoordinator:
-    """Instantiate and set up a coordinator."""
+    """Instantiate and set up a coordinator with Store mocked."""
     coordinator = WashReminderCoordinator(hass, entry)
-    await coordinator.async_setup()
+    with patch.object(coordinator._store, "async_load", return_value=None), \
+         patch.object(coordinator._store, "async_save", return_value=None):
+        await coordinator.async_setup()
+    # Keep save mocked for background tasks during the test
+    coordinator._store.async_save = AsyncMock()
     return coordinator
 
 
@@ -98,13 +105,11 @@ async def test_setup_raises_if_trigger_entity_missing(
     _register_notify(hass)
 
     data = _base_config()
-    # Don't set binary_sensor.wm state — it won't exist
     entry = _mock_entry(hass, data)
 
-    from homeassistant.exceptions import ConfigEntryNotReady
-
     with pytest.raises(ConfigEntryNotReady):
-        await _setup_coordinator(hass, entry)
+        coordinator = WashReminderCoordinator(hass, entry)
+        await coordinator.async_setup()
 
 
 async def test_setup_raises_if_person_entity_missing(
@@ -112,16 +117,14 @@ async def test_setup_raises_if_person_entity_missing(
 ) -> None:
     """ConfigEntryNotReady if the person entity doesn't exist."""
     hass.states.async_set("binary_sensor.wm", "off")
-    # Don't set person.someone
     _register_notify(hass)
 
     data = _base_config()
     entry = _mock_entry(hass, data)
 
-    from homeassistant.exceptions import ConfigEntryNotReady
-
     with pytest.raises(ConfigEntryNotReady):
-        await _setup_coordinator(hass, entry)
+        coordinator = WashReminderCoordinator(hass, entry)
+        await coordinator.async_setup()
 
 
 async def test_setup_raises_if_door_sensor_missing(
@@ -135,10 +138,9 @@ async def test_setup_raises_if_door_sensor_missing(
     data = _base_config(door_sensor="binary_sensor.door")
     entry = _mock_entry(hass, data)
 
-    from homeassistant.exceptions import ConfigEntryNotReady
-
     with pytest.raises(ConfigEntryNotReady):
-        await _setup_coordinator(hass, entry)
+        coordinator = WashReminderCoordinator(hass, entry)
+        await coordinator.async_setup()
 
 
 async def test_setup_succeeds_with_valid_entities(
@@ -550,12 +552,10 @@ async def test_startup_restores_pending_state(
     data = _base_config()
     entry = _mock_entry(hass, data)
 
-    # Mock the store to return saved pending state
-    with patch(
-        "custom_components.washreminder.coordinator.Store.async_load",
-        return_value={"pending": True},
-    ):
-        coordinator = await _setup_coordinator(hass, entry)
+    coordinator = WashReminderCoordinator(hass, entry)
+    with patch.object(coordinator._store, "async_load", return_value={"pending": True}), \
+         patch.object(coordinator._store, "async_save", return_value=None):
+        await coordinator.async_setup()
 
     assert coordinator.pending is True
     assert coordinator.person_listener_active is True
@@ -572,11 +572,13 @@ async def test_startup_pending_and_home_delivers(
     data = _base_config()
     entry = _mock_entry(hass, data)
 
-    with patch(
-        "custom_components.washreminder.coordinator.Store.async_load",
-        return_value={"pending": True},
-    ):
-        coordinator = await _setup_coordinator(hass, entry)
+    coordinator = WashReminderCoordinator(hass, entry)
+    with patch.object(coordinator._store, "async_load", return_value={"pending": True}), \
+         patch.object(coordinator._store, "async_save", return_value=None):
+        await coordinator.async_setup()
+
+    # Keep save mocked for background delivery task
+    coordinator._store.async_save = AsyncMock()
 
     # Should have cleared pending and started delivery
     assert coordinator.pending is False
