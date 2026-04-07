@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_track_state_change_event
@@ -38,6 +38,7 @@ from .const import (
     DEFAULT_REPEAT_INTERVAL_MINUTES,
     DEFAULT_SNOOZE_MINUTES,
     DOMAIN,
+    EVENT_NOTIFICATION_ACTION,
     EVENT_WASHDATA_CYCLE_ENDED,
     NOTIFICATION_TAG,
     STORAGE_KEY,
@@ -152,13 +153,15 @@ class WashReminderCoordinator:
             config.get(CONF_CRITICAL_NOTIFICATION, DEFAULT_CRITICAL_NOTIFICATION)
         )
 
-        # serialize_in_event_loop=True: explicit, matches the 2025.11+ default.
-        self._store: Store = Store(
-            hass,
-            STORAGE_VERSION,
-            STORAGE_KEY,
-            serialize_in_event_loop=True,
-        )
+        # serialize_in_event_loop=True avoids blocking I/O on the event loop.
+        # The kwarg was added in HA 2025.11; omit it on older cores so CI
+        # (which pins an earlier HA) doesn't break.
+        try:
+            self._store: Store = Store(
+                hass, STORAGE_VERSION, STORAGE_KEY, serialize_in_event_loop=True,
+            )
+        except TypeError:
+            self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
         # In-memory pending flag. Set synchronously in @callback handlers to
         # prevent race conditions on rapid consecutive state-change events.
@@ -194,6 +197,17 @@ class WashReminderCoordinator:
             return "awaiting_delivery"
         if self._pending:
             return "pending_arrival"
+        return "idle"
+
+    @property
+    def runtime_state(self) -> str:
+        """Short state label for the diagnostic runtime sensor."""
+        if self.notification_task_running:
+            return "reminder_loop"
+        if self.delivery_task_running:
+            return "arrival_delivery"
+        if self.person_listener_active:
+            return "awaiting_arrival"
         return "idle"
 
     @property
@@ -341,7 +355,7 @@ class WashReminderCoordinator:
         # Restore state after HA restart.
         if self._pending:
             person_state = self._hass.states.get(self._person)
-            if person_state and person_state.state == "home":
+            if person_state and person_state.state == STATE_HOME:
                 _LOGGER.debug("Startup: pending and already home — notifying now")
                 self._pending = False
                 self._delivery_task = self._entry.async_create_background_task(
@@ -425,7 +439,7 @@ class WashReminderCoordinator:
         self._cancel_delivery_task()
 
         person_state = self._hass.states.get(self._person)
-        if person_state and person_state.state == "home":
+        if person_state and person_state.state == STATE_HOME:
             _LOGGER.debug("Person is home — sending reminder now")
             self._start_loop()
         else:
@@ -477,6 +491,11 @@ class WashReminderCoordinator:
         """Handle ha_washdata_cycle_ended events from the event bus."""
         if self._washdata_entry_id:
             if event.data.get("entry_id") != self._washdata_entry_id:
+                _LOGGER.debug(
+                    "Ignoring WashData event from entry_id=%s (configured: %s)",
+                    event.data.get("entry_id"),
+                    self._washdata_entry_id,
+                )
                 return
 
         _LOGGER.debug(
@@ -493,7 +512,7 @@ class WashReminderCoordinator:
         old = event.data.get("old_state")
         new = event.data.get("new_state")
 
-        if not (old and old.state != "home" and new and new.state == "home"):
+        if not (old and old.state != STATE_HOME and new and new.state == STATE_HOME):
             return
 
         if not self._pending:
@@ -700,7 +719,7 @@ class WashReminderCoordinator:
                 matched.append(action)
                 trigger_event.set()
 
-        unsub = self._hass.bus.async_listen("mobile_app_notification_action", _handler)
+        unsub = self._hass.bus.async_listen(EVENT_NOTIFICATION_ACTION, _handler)
         try:
             await asyncio.wait_for(trigger_event.wait(), timeout=timeout)
         except asyncio.TimeoutError:

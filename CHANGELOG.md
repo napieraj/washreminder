@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.1] - 2026-04-07
+
+### Fixed
+
+- **Translation sync** — `strings.json` had drifted from `translations/en.json` in several data descriptions and error messages. Removed orphaned `notify_entity_not_found` error key (unused in code, flagged by hassfest). HA would show raw translation keys instead of user-friendly text in affected config flow paths.
+- **Store compatibility** — `Store(serialize_in_event_loop=True)` raised `TypeError` on HA versions before 2025.11 (including the test harness). Coordinator now falls back gracefully when the kwarg is unsupported.
+
+### Changed
+
+- Extracted hardcoded `"mobile_app_notification_action"` event name to `EVENT_NOTIFICATION_ACTION` constant in `const.py`.
+- Replaced hardcoded `"home"` string comparisons with `STATE_HOME` from `homeassistant.const` in three coordinator locations.
+- Added `runtime_state` property to the coordinator, mirroring the existing `activity_state` pattern. The runtime sensor now delegates to this property instead of computing state inline.
+- Added debug logging when WashData events are filtered out by `entry_id` mismatch, aiding troubleshooting when notifications silently stop.
+- Removed unused `errors` dict initialisations from `async_step_pick_trigger` and `async_step_door_options` config flow steps.
+
+### Added
+
+- **Coordinator test suite** — 22 new tests in `tests/test_coordinator.py` covering setup validation, all three trigger modes, person away/arrival lifecycle, door sensor cancellation (including inverted polarity), notification action handling, state property transitions, and startup state restoration.
+
+---
+
 ## [1.4.0] - 2026-04-06
 
 ### Added

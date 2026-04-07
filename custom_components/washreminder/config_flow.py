@@ -346,8 +346,6 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_pick_trigger(self, user_input=None):
         """Select binary_sensor or sensor for cycle completion."""
-        errors: dict[str, str] = {}
-
         if user_input is not None:
             entity_id = user_input[CONF_TRIGGER_ENTITY]
             self._entity_data[CONF_TRIGGER_ENTITY] = entity_id
@@ -361,7 +359,6 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="pick_trigger",
             data_schema=_pick_trigger_schema(self._entity_data),
-            errors=errors,
         )
 
     async def async_step_trigger_state(self, user_input=None):
@@ -408,8 +405,6 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_door_options(self, user_input=None):
         """Door sensor polarity — only after a door entity was chosen."""
-        errors: dict[str, str] = {}
-
         if user_input is not None:
             self._entity_data[CONF_DOOR_SENSOR_INVERTED] = user_input.get(
                 CONF_DOOR_SENSOR_INVERTED, False
@@ -419,7 +414,6 @@ class WashReminderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="door_options",
             data_schema=_door_options_schema(self._entity_data),
-            errors=errors,
         )
 
     async def _async_finish_entities_step(self):
