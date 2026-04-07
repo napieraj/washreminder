@@ -101,6 +101,7 @@ Time to empty the washing machine.
 | You tap **Snooze** | Notification cleared, new reminder after the snooze duration |
 | You ignore it | Another reminder at the repeat interval, with escalating text |
 | You open the machine door | Everything cancelled — active reminders, pending state, delivery tasks |
+| You leave home while reminders are active | Reminders pause, resume automatically when you return |
 | Cycle finishes while you're away | Saved to disk, notification sent when you get home |
 | HA restarts while waiting | State restored, notification still sent on arrival |
 

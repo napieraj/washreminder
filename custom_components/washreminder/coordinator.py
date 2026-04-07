@@ -691,7 +691,6 @@ class WashReminderCoordinator:
                         self._max_repeats,
                     )
 
-            await self._clear_notification()
             _LOGGER.info("Reached %d reminders — stopping", self._max_repeats)
 
         except asyncio.CancelledError:

@@ -627,37 +627,6 @@ async def test_door_open_clears_notification_after_loop_exhausted(
         mock_clear.assert_called_once()
 
 
-async def test_notification_cleared_on_loop_exhaustion(
-    hass: HomeAssistant,
-) -> None:
-    """Notification should be cleared when the loop exhausts all repeats."""
-    hass.states.async_set("binary_sensor.wm", "on")
-    hass.states.async_set("person.someone", "home")
-    _register_notify(hass)
-
-    data = _base_config()
-    entry = _mock_entry(hass, data)
-    coordinator = await _setup_coordinator(hass, entry)
-
-    clear_called = asyncio.Event()
-    original_clear = coordinator._clear_notification
-
-    async def _tracked_clear() -> None:
-        await original_clear()
-        clear_called.set()
-
-    with patch.object(
-        coordinator, "_wait_for_action", new_callable=AsyncMock, return_value=None
-    ), patch.object(coordinator, "_clear_notification", side_effect=_tracked_clear):
-        hass.states.async_set("binary_sensor.wm", "off")
-        await hass.async_block_till_done()
-
-        # Wait for the loop to finish and clear to be called
-        await asyncio.wait_for(clear_called.wait(), timeout=5.0)
-
-    assert coordinator.notification_task_running is False
-
-
 # ---------------------------------------------------------------------------
 # Person departure pauses reminders
 # ---------------------------------------------------------------------------
