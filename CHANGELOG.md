@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.2] - 2026-04-07
+
+### Fixed
+
+- **Door open not dismissing notification** — opening the washer door now clears the notification even after the reminder loop has finished (previously only worked while the loop was still actively running).
+
+### Added
+
+- **Pause reminders on departure** — when the person leaves home while reminders are active, the loop pauses and resumes automatically on return instead of sending notifications to an empty house.
+
+### Changed
+
+- Person entity listener is now always-active instead of dynamically subscribed. Simplifies lifecycle management and enables departure detection.
+
+---
+
 ## [1.4.1] - 2026-04-07
 
 ### Fixed
